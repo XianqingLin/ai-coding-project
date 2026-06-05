@@ -54,6 +54,7 @@ class MockChatModel:
         ...     mock_tool_call("read_file", {"path": "main.py"}, content="读一下主文件"),
         ...     mock_text("任务完成！"),
         ... ])
+        >>> from ai_coding.agent.core import LangGraphAgent
         >>> agent = LangGraphAgent(llm=llm, tools=DEFAULT_TOOLS)
         >>> result = agent.run("帮我看看项目")
 

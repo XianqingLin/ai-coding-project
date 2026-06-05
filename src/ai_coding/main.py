@@ -10,7 +10,7 @@ from pathlib import Path
 
 from ai_coding.config import DEFAULT_LLM_PROVIDER
 from ai_coding.llm import create_lc_llm
-from ai_coding.langgraph_agent import LangGraphAgent
+from ai_coding.agent import LangGraphAgent, SessionManager
 from ai_coding.logger import setup_logging, get_logger
 from ai_coding.tools import DEFAULT_TOOLS
 
@@ -93,25 +93,33 @@ def _find_git_root(start: Path) -> Path | None:
     return None
 
 
-def _print_welcome(project_root: Path, provider: str, model: str) -> None:
+def _print_welcome(
+    project_root: Path, provider: str, model: str, session_name: str
+) -> None:
     """打印欢迎信息."""
     print("=" * 50)
     print("  AI Coding Assistant")
     print("=" * 50)
-    print(f"  Project: {project_root}")
+    print(f"  Project : {project_root}")
     print(f"  Provider: {provider}")
-    print(f"  Model: {model}")
+    print(f"  Model   : {model}")
+    print(f"  Session : {session_name}")
     print("-" * 50)
     print("  Commands:")
-    print("    /help     - Show help")
-    print("    /status   - Show context usage")
-    print("    /tools    - List available tools")
-    print("    /history  - Show conversation history")
-    print("    /new      - Start a new session")
-    print("    /verbose  - Toggle verbose mode")
-    print("    /stream   - Toggle streaming mode")
-    print("    /clear    - Clear screen")
-    print("    /exit     - Exit")
+    print("    /help              - Show help")
+    print("    /status            - Show context usage")
+    print("    /tools             - List available tools")
+    print("    /history           - Show conversation history")
+    print("    /new               - Create a new session")
+    print("    /session list      - List all sessions")
+    print("    /session new NAME  - Create named session")
+    print("    /session switch ID - Switch to session")
+    print("    /session rm ID     - Remove session")
+    print("    /session rename ID NAME")
+    print("    /verbose           - Toggle verbose mode")
+    print("    /stream            - Toggle streaming mode")
+    print("    /clear             - Clear screen")
+    print("    /exit              - Exit")
     print("=" * 50)
 
 
@@ -136,13 +144,80 @@ def _print_event(event: dict) -> None:
         print(f"\n[Error] {event.get('text', '')}")
 
 
-def _handle_command(agent: LangGraphAgent, cmd: str, args: str) -> str:
+def _handle_session_command(sm: SessionManager, cmd_parts: list[str]) -> str:
+    """处理 /session 子命令."""
+    if len(cmd_parts) < 2:
+        return (
+            "Usage:\n"
+            "  /session list\n"
+            "  /session new [NAME]\n"
+            "  /session switch <ID>\n"
+            "  /session rm <ID>\n"
+            "  /session rename <ID> <NAME>"
+        )
+
+    sub = cmd_parts[1].lower()
+
+    if sub == "list":
+        sessions = sm.list()
+        if not sessions:
+            return "No sessions."
+        lines = [f"Sessions ({len(sessions)}):"]
+        for s in sessions:
+            marker = "*" if s["is_current"] else " "
+            lines.append(
+                f"  [{marker}] {s['session_id']}  {s['name']}  "
+                f"({s['message_count']} msgs)"
+            )
+        return "\n".join(lines)
+
+    if sub == "new":
+        name = " ".join(cmd_parts[2:]) if len(cmd_parts) > 2 else ""
+        sid = sm.create(name=name)
+        return f"Created session: {sid}"
+
+    if sub == "switch":
+        if len(cmd_parts) < 3:
+            return "Usage: /session switch <ID>"
+        sid = cmd_parts[2]
+        if sm.switch(sid):
+            session = sm.current
+            return f"Switched to: {session.name if session else sid}"
+        return f"Session not found: {sid}"
+
+    if sub in ("rm", "delete", "del"):
+        if len(cmd_parts) < 3:
+            return "Usage: /session rm <ID>"
+        sid = cmd_parts[2]
+        if sm.delete(sid):
+            return f"Deleted session: {sid}"
+        return f"Session not found: {sid}"
+
+    if sub == "rename":
+        if len(cmd_parts) < 4:
+            return "Usage: /session rename <ID> <NAME>"
+        sid = cmd_parts[2]
+        name = " ".join(cmd_parts[3:])
+        if sm.rename(sid, name):
+            return f"Renamed to: {name}"
+        return f"Session not found: {sid}"
+
+    return f"Unknown /session subcommand: {sub}"
+
+
+def _handle_command(
+    sm: SessionManager, cmd: str, args: str
+) -> str:
     """处理内置命令.
 
     Returns:
         命令执行结果文本，空字符串表示无需输出.
 
     """
+    agent = sm.get_current_agent()
+    if agent is None:
+        return "[错误] 当前没有活跃的会话."
+
     if cmd in ("/exit", "/quit"):
         print("\n[信息] 退出.")
         sys.exit(0)
@@ -150,15 +225,20 @@ def _handle_command(agent: LangGraphAgent, cmd: str, args: str) -> str:
     if cmd == "/help":
         return (
             "Available commands:\n"
-            "  /help     - Show help\n"
-            "  /status   - Show context usage\n"
-            "  /tools    - List available tools\n"
-            "  /history  - Show conversation history\n"
-            "  /new      - Start a new session (clear history)\n"
-            "  /verbose  - Toggle verbose mode\n"
-            "  /stream   - Toggle streaming mode\n"
-            "  /clear    - Clear screen\n"
-            "  /exit     - Exit"
+            "  /help              - Show help\n"
+            "  /status            - Show context usage\n"
+            "  /tools             - List available tools\n"
+            "  /history           - Show conversation history\n"
+            "  /new               - Create a new session\n"
+            "  /session list      - List all sessions\n"
+            "  /session new NAME  - Create named session\n"
+            "  /session switch ID - Switch to session\n"
+            "  /session rm ID     - Remove session\n"
+            "  /session rename ID NAME\n"
+            "  /verbose           - Toggle verbose mode\n"
+            "  /stream            - Toggle streaming mode\n"
+            "  /clear             - Clear screen\n"
+            "  /exit              - Exit"
         )
 
     if cmd == "/status":
@@ -178,9 +258,9 @@ def _handle_command(agent: LangGraphAgent, cmd: str, args: str) -> str:
         return "Screen cleared."
 
     if cmd == "/new":
-        if hasattr(agent, "clear_history"):
-            agent.clear_history()
-        return "New session started."
+        sid = sm.create()
+        session = sm.current
+        return f"New session: {session.name if session else sid}"
 
     if cmd == "/tools":
         stats = agent.get_stats()
@@ -206,7 +286,6 @@ def _handle_command(agent: LangGraphAgent, cmd: str, args: str) -> str:
         return "\n".join(lines)
 
     if cmd == "/verbose":
-        # verbose 状态由外部管理
         return "Use --verbose flag on startup to control verbose mode."
 
     if cmd == "/stream":
@@ -217,7 +296,7 @@ def _handle_command(agent: LangGraphAgent, cmd: str, args: str) -> str:
     return f"Unknown command: {cmd}. Type /help for available commands."
 
 
-def _run_repl(agent: LangGraphAgent, verbose: bool = False) -> None:
+def _run_repl(sm: SessionManager, verbose: bool = False) -> None:
     """运行纯文本 REPL 交互循环."""
     while True:
         try:
@@ -230,12 +309,24 @@ def _run_repl(agent: LangGraphAgent, verbose: bool = False) -> None:
             continue
 
         if user_input.startswith("/"):
-            parts = user_input.split(maxsplit=1)
+            parts = user_input.split()
             cmd = parts[0].lower()
-            args = parts[1] if len(parts) > 1 else ""
-            result = _handle_command(agent, cmd, args)
+
+            if cmd == "/session":
+                result = _handle_session_command(sm, parts)
+                if result:
+                    print(f"\n{result}")
+                continue
+
+            args = user_input[len(cmd):].strip()
+            result = _handle_command(sm, cmd, args)
             if result:
                 print(f"\n{result}")
+            continue
+
+        agent = sm.get_current_agent()
+        if agent is None:
+            print("\n[错误] 当前没有活跃的会话，使用 /session new 创建.")
             continue
 
         logger.info(f"User input: {user_input}")
@@ -280,15 +371,17 @@ def main() -> int:
         print(f"[Error] {e}")
         return 1
 
-    agent = LangGraphAgent(
-        llm=llm,
+    # 使用 SessionManager 管理多会话
+    sm = SessionManager(
+        llm_factory=lambda: create_lc_llm(provider),
         tools=DEFAULT_TOOLS,
-        max_iterations=10,
-        streaming=True,
     )
 
-    _print_welcome(project_root, provider, llm.model_name)
-    _run_repl(agent, verbose=verbose)
+    current = sm.current
+    session_name = current.name if current else "default"
+
+    _print_welcome(project_root, provider, llm.model_name, session_name)
+    _run_repl(sm, verbose=verbose)
     return 0
 
 
