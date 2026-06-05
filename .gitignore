@@ -138,3 +138,8 @@ Thumbs.db
 .env.*.local
 output/
 temp/
+
+# Deep SWE task dataset (large, not part of source code)
+deep-swe/
+results/
+test-tasks/

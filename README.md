@@ -8,7 +8,7 @@
 
 - 🤖 **ReAct Agent 架构** — AI 能思考、决策、调用工具完成任务
 - ⚡ **流式输出** — AI 回复逐字实时显示，无需等待
-- 🛠️ **工具系统** — 读取/写入/编辑文件、列出目录、执行命令
+- 🛠️ **工具系统** — 读取/写入/编辑文件、列出目录、执行命令、代码搜索
 - 🎨 **语法高亮** — 代码块自动高亮显示
 - 📝 **日志记录** — 自动记录操作日志到 `logs/` 目录
 - 🔌 **多模型支持** — 支持 Kimi (K2.6)、OpenAI、Mock 模式
@@ -35,8 +35,8 @@ venv\Scripts\activate
 # macOS/Linux
 source venv/bin/activate
 
-# 安装依赖
-pip install -r requirements.txt
+# 安装依赖（推荐 editable 模式）
+pip install -e .
 ```
 
 ### 配置
@@ -117,6 +117,19 @@ README.md 的内容如下：
 >>> 把 README.md 中的 "Python >= 3.10" 改成 "Python >= 3.11"
 ```
 
+### DeepSWE 单任务评估
+
+```bash
+# 运行单个 DeepSWE 任务
+python scripts/run_single.py --task abs-module-cache-flags
+
+# 单步调试模式
+python scripts/run_single.py --task abs-module-cache-flags --step
+
+# 使用自定义提示
+python scripts/run_single.py --task abs-module-cache-flags --prompt prompts/v2.txt
+```
+
 ### 内置命令
 
 | 命令 | 功能 |
@@ -140,17 +153,23 @@ ai-coding/
 │       ├── __init__.py     # 包入口
 │       ├── __main__.py     # python -m ai_coding
 │       ├── main.py         # 程序入口
-│       ├── agent.py        # ReAct Agent 核心
-│       ├── llm.py          # LLM 接口（Kimi/OpenAI/Mock）
-│       ├── repl.py         # 控制台交互（流式/高亮）
+│       ├── langgraph_agent.py  # ReAct Agent 核心（LangGraph）
+│       ├── llm/            # LLM 封装
+│       │   ├── kimi_chat.py    # KimiChatOpenAI（支持 reasoning_content）
+│       │   └── lc_llm.py       # LLM 工厂（Kimi/OpenAI/Mock）
+│       ├── lc_llm.py       # 【兼容重定向】保留旧导入路径
+│       ├── interface/      # 控制台交互
+│       │   └── textual_app.py  # TUI 界面
 │       ├── config.py       # 环境变量配置
 │       ├── logger.py       # 日志系统
 │       └── tools/          # 工具系统
 │           ├── base.py     # Tool / ToolRegistry
-│           └── file_tools.py  # 文件操作工具
-├── tests/                  # 测试文件
+│           ├── file_tools.py   # 文件操作（read/write/str_replace/insert_after_line）
+│           ├── grep_tool.py    # 代码搜索
+│           ├── plan_tool.py    # 阶段切换计划
+│           └── todo_tool.py    # 任务列表
 ├── docs/
-│   └── ROADMAP.md          # 开发路线图
+│   └── agent_function_gaps.md  # Agent 功能缺失清单
 ├── .env                    # 环境变量（API Key 等）
 ├── .env.example            # 环境变量模板
 ├── .gitignore

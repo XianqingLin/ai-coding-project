@@ -9,10 +9,12 @@ import sys
 from pathlib import Path
 
 from ai_coding.config import DEFAULT_LLM_PROVIDER
-from ai_coding.lc_llm import create_lc_llm
+from ai_coding.llm import create_lc_llm
 from ai_coding.langgraph_agent import LangGraphAgent
-from ai_coding.logger import setup_logging
+from ai_coding.logger import setup_logging, get_logger
 from ai_coding.tools import DEFAULT_TOOLS
+
+logger = get_logger(__name__)
 
 
 def _resolve_project_root(cli_args: list[str]) -> Path:
@@ -91,6 +93,166 @@ def _find_git_root(start: Path) -> Path | None:
     return None
 
 
+def _print_welcome(project_root: Path, provider: str, model: str) -> None:
+    """打印欢迎信息."""
+    print("=" * 50)
+    print("  AI Coding Assistant")
+    print("=" * 50)
+    print(f"  Project: {project_root}")
+    print(f"  Provider: {provider}")
+    print(f"  Model: {model}")
+    print("-" * 50)
+    print("  Commands:")
+    print("    /help     - Show help")
+    print("    /status   - Show context usage")
+    print("    /tools    - List available tools")
+    print("    /history  - Show conversation history")
+    print("    /new      - Start a new session")
+    print("    /verbose  - Toggle verbose mode")
+    print("    /stream   - Toggle streaming mode")
+    print("    /clear    - Clear screen")
+    print("    /exit     - Exit")
+    print("=" * 50)
+
+
+def _print_event(event: dict) -> None:
+    """打印 Agent 轨迹事件."""
+    etype = event.get("type")
+    if etype == "thinking":
+        print(f"\n[Thinking] {event.get('text', '')}")
+    elif etype == "assistant":
+        print(f"\n[Assistant] {event.get('text', '')}")
+    elif etype == "tool_call":
+        name = event.get("name", "")
+        args = event.get("args", {})
+        args_str = ", ".join(f"{k}={v!r}" for k, v in args.items())
+        print(f"\n[Tool] {name}({args_str})")
+    elif etype == "observation":
+        text = event.get("text", "")
+        if len(text) > 200:
+            text = text[:200] + f" ... ({len(text)} chars)"
+        print(f"\n[Observation] {text}")
+    elif etype == "error":
+        print(f"\n[Error] {event.get('text', '')}")
+
+
+def _handle_command(agent: LangGraphAgent, cmd: str, args: str) -> str:
+    """处理内置命令.
+
+    Returns:
+        命令执行结果文本，空字符串表示无需输出.
+
+    """
+    if cmd in ("/exit", "/quit"):
+        print("\n[信息] 退出.")
+        sys.exit(0)
+
+    if cmd == "/help":
+        return (
+            "Available commands:\n"
+            "  /help     - Show help\n"
+            "  /status   - Show context usage\n"
+            "  /tools    - List available tools\n"
+            "  /history  - Show conversation history\n"
+            "  /new      - Start a new session (clear history)\n"
+            "  /verbose  - Toggle verbose mode\n"
+            "  /stream   - Toggle streaming mode\n"
+            "  /clear    - Clear screen\n"
+            "  /exit     - Exit"
+        )
+
+    if cmd == "/status":
+        if not hasattr(agent, "get_context_usage"):
+            return "Status not available."
+        usage = agent.get_context_usage()
+        used = usage.get("used_tokens", 0)
+        limit = usage.get("limit_tokens", 128000)
+        pct = usage.get("percentage", 0.0)
+        bar_len = 20
+        filled = int(bar_len * pct / 100)
+        bar = "█" * filled + "░" * (bar_len - filled)
+        return f"Context: [{bar}] {pct}% ({used:,} / {limit:,} tokens)"
+
+    if cmd == "/clear":
+        print("\n" * 50)
+        return "Screen cleared."
+
+    if cmd == "/new":
+        if hasattr(agent, "clear_history"):
+            agent.clear_history()
+        return "New session started."
+
+    if cmd == "/tools":
+        stats = agent.get_stats()
+        tools = stats.get("tools", [])
+        if not tools:
+            return "No tools available."
+        lines = [f"Available tools ({len(tools)}):"]
+        for name in tools:
+            lines.append(f"  - {name}")
+        return "\n".join(lines)
+
+    if cmd == "/history":
+        history = agent.get_history()
+        if not history:
+            return "History is empty."
+        lines = ["Conversation history:"]
+        for i, msg in enumerate(history, 1):
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+            if len(content) > 100:
+                content = content[:100] + "..."
+            lines.append(f"  {i}. [{role}] {content}")
+        return "\n".join(lines)
+
+    if cmd == "/verbose":
+        # verbose 状态由外部管理
+        return "Use --verbose flag on startup to control verbose mode."
+
+    if cmd == "/stream":
+        agent.streaming = not agent.streaming
+        status = "on" if agent.streaming else "off"
+        return f"Streaming mode {status}."
+
+    return f"Unknown command: {cmd}. Type /help for available commands."
+
+
+def _run_repl(agent: LangGraphAgent, verbose: bool = False) -> None:
+    """运行纯文本 REPL 交互循环."""
+    while True:
+        try:
+            user_input = input("\n>>> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n[信息] 退出.")
+            break
+
+        if not user_input:
+            continue
+
+        if user_input.startswith("/"):
+            parts = user_input.split(maxsplit=1)
+            cmd = parts[0].lower()
+            args = parts[1] if len(parts) > 1 else ""
+            result = _handle_command(agent, cmd, args)
+            if result:
+                print(f"\n{result}")
+            continue
+
+        logger.info(f"User input: {user_input}")
+
+        if verbose and hasattr(agent, "run_with_trace"):
+            for event in agent.run_with_trace(user_input):
+                _print_event(event)
+        elif agent.streaming:
+            print("\n[Assistant] ", end="", flush=True)
+            for chunk in agent.run_stream(user_input):
+                print(chunk, end="", flush=True)
+            print()
+        else:
+            result = agent.run(user_input)
+            print(f"\n[Assistant] {result}")
+
+
 def main() -> int:
     """程序主入口.
 
@@ -100,8 +262,12 @@ def main() -> int:
     """
     setup_logging()
 
+    # 解析命令行参数
+    verbose = "--verbose" in sys.argv or "-v" in sys.argv
+    cli_args = [a for a in sys.argv[1:] if a not in ("--verbose", "-v")]
+
     # 解析项目根路径
-    project_root = _resolve_project_root(sys.argv[1:])
+    project_root = _resolve_project_root(cli_args)
 
     # 切换到项目目录（工具操作都基于此目录）
     os.chdir(project_root)
@@ -121,17 +287,8 @@ def main() -> int:
         streaming=True,
     )
 
-    from ai_coding.interface.textual_app import ChatApp  # 延迟导入避免循环依赖
-    app = ChatApp(
-        agent=agent,
-        verbose=True,
-        startup_info={
-            "project": str(project_root),
-            "provider": provider,
-            "model": llm.model_name,
-        },
-    )
-    app.run()
+    _print_welcome(project_root, provider, llm.model_name)
+    _run_repl(agent, verbose=verbose)
     return 0
 
 

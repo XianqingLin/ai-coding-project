@@ -66,3 +66,6 @@ OPENAI_MODEL = get_env("OPENAI_MODEL", "gpt-4")
 
 DEFAULT_LLM_PROVIDER = get_env("DEFAULT_LLM_PROVIDER", "kimi")
 LOG_LEVEL = get_env("LOG_LEVEL", "INFO")
+
+# Mock LLM 配置
+MOCK_INTERACTIVE = get_env_bool("MOCK_INTERACTIVE", False)

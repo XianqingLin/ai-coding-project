@@ -258,8 +258,6 @@ class ToolRegistry:
         """
         return [tool.get_schema() for tool in self._tools.values()]
     
-        from langchain_core.tools import BaseTool
-        
     def to_langchain_tools(self) -> List[BaseTool]:
         """转换为 LangChain 工具列表.
         

@@ -14,7 +14,7 @@ Example:
 __version__ = "0.1.0"
 
 from ai_coding.langgraph_agent import LangGraphAgent
-from ai_coding.lc_llm import create_lc_llm
+from ai_coding.llm import create_lc_llm
 from ai_coding.tools import DEFAULT_TOOLS
 from ai_coding.tools.base import Tool, ToolParameter, ToolCall, ToolRegistry
 

@@ -1,12 +1,6 @@
-"""LangChain LLM 封装模块.
+"""LangChain LLM 工厂模块.
 
-使用 langchain_openai.ChatOpenAI 封装 Kimi / OpenAI 模型.
-Kimi 兼容 OpenAI API 格式，可直接使用 ChatOpenAI.
-
-针对 Kimi K2.6 的 thinking 模式做了特殊处理：
-- Kimi 在 tool_calls 场景中要求请求中包含 reasoning_content
-- LangChain 的 ChatOpenAI 默认不传递此字段
-- 通过子类化 _get_request_payload 自动注入
+根据提供商名称创建对应的 LangChain ChatOpenAI 实例.
 """
 
 from langchain_openai import ChatOpenAI
@@ -19,44 +13,17 @@ from ai_coding.config import (
     OPENAI_BASE_URL,
     OPENAI_MODEL,
 )
+from ai_coding.llm.kimi_chat import KimiChatOpenAI
 from ai_coding.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-class KimiChatOpenAI(ChatOpenAI):
-    """支持 Kimi K2.6 reasoning_content 的 ChatOpenAI 子类.
-
-    Kimi K2.6 在 assistant message 包含 tool_calls 时，
-    要求请求中同时包含 reasoning_content 字段.
-    LangChain 默认不传递此字段，导致 400 错误.
-
-    此类在构建 API 请求 payload 时，自动为包含 tool_calls 的
-    assistant 消息注入空的 reasoning_content.
-
-    """
-
-    def _get_request_payload(self, input_, *, stop=None, **kwargs):
-        """重写请求 payload 构建，注入 reasoning_content."""
-        payload = super()._get_request_payload(input_, stop=stop, **kwargs)
-
-        # 为包含 tool_calls 的 assistant 消息注入 reasoning_content
-        for message in payload.get("messages", []):
-            if (
-                message.get("role") == "assistant"
-                and message.get("tool_calls")
-                and "reasoning_content" not in message
-            ):
-                message["reasoning_content"] = ""
-
-        return payload
 
 
 def create_lc_llm(provider: str = "kimi") -> ChatOpenAI:
     """根据提供商名称创建 LangChain ChatOpenAI 实例.
 
     Args:
-        provider: LLM 提供商名称. 可选: "kimi", "openai".
+        provider: LLM 提供商名称. 可选: "kimi", "openai", "mock".
 
     Returns:
         ChatOpenAI 实例.
@@ -97,7 +64,13 @@ def create_lc_llm(provider: str = "kimi") -> ChatOpenAI:
             streaming=True,
         )
 
+    elif provider == "mock":
+        from ai_coding.mock_llm import MockChatModel
+
+        logger.info("创建 Mock LLM")
+        return MockChatModel()
+
     else:
         raise ValueError(
-            f"未知的 LLM 提供商: '{provider}'. 可选: kimi, openai"
+            f"未知的 LLM 提供商: '{provider}'. 可选: kimi, openai, mock"
         )
