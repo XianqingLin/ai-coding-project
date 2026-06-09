@@ -132,13 +132,14 @@ class LangGraphAgent:
             if self.system_prompt:
                 messages.append(SystemMessage(content=self.system_prompt))
             messages.append(HumanMessage(content=user_input))
-            return {"messages": messages, "file_snapshots": {}}
+            return {"messages": messages, "file_snapshots": {}, "todos": []}
 
         # 复制现有历史并追加用户输入
         messages = list(self.state["messages"]) + [HumanMessage(content=user_input)]
         return {
             "messages": messages,
             "file_snapshots": dict(self.state.get("file_snapshots", {})),
+            "todos": [dict(t) for t in self.state.get("todos", [])],
         }
 
     def compact(self) -> str:
@@ -249,6 +250,7 @@ class LangGraphAgent:
         current_state: Dict[str, Any] = {
             "messages": list(initial.get("messages", [])),
             "file_snapshots": dict(initial.get("file_snapshots", {})),
+            "todos": list(initial.get("todos", [])),
         }
 
         try:
@@ -306,6 +308,8 @@ class LangGraphAgent:
                         )
                     if "file_snapshots" in update:
                         current_state["file_snapshots"].update(update["file_snapshots"])
+                    if "todos" in update:
+                        current_state["todos"] = list(update["todos"])
 
             elapsed = time.time() - start_time
             logger.info(f"[轨迹] Agent 完成 | 总耗时={elapsed:.1f}s | 步骤={step}")

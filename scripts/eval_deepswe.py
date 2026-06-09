@@ -313,8 +313,10 @@ def save_model_patch(repo_dir: Path, output_path: Path) -> bool:
         ["git", "-C", str(repo_dir), "diff", "--cached", "--binary"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
-    if result.stdout.strip():
+    if result.stdout and result.stdout.strip():
         output_path.write_text(result.stdout, encoding="utf-8")
         return True
     return False

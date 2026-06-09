@@ -3,13 +3,14 @@
 负责执行工具调用，并根据工具类型更新文件快照.
 """
 
-from typing import Dict
+from typing import Dict, List
 
 from langchain_core.messages import AIMessage, ToolMessage
 
 from ai_coding.agent.state import AgentState
 from ai_coding.logger import get_logger
 from ai_coding.tools.base import ToolRegistry
+from ai_coding.tools.todo_tool import TodoTool
 
 logger = get_logger(__name__)
 
@@ -69,13 +70,19 @@ def create_tools_node(tool_registry: ToolRegistry):
     """
 
     def tools_node(state: AgentState):
-        """执行工具调用并更新文件快照."""
+        """执行工具调用并更新文件快照和任务列表."""
         last_msg = state["messages"][-1]
         if not isinstance(last_msg, AIMessage) or not last_msg.tool_calls:
             return {"messages": [], "file_snapshots": {}}
 
+        # 同步 state 中的 todos 到 TodoTool 实例（确保跨轮次一致性）
+        todo_tool = tool_registry.get("set_todo")
+        if isinstance(todo_tool, TodoTool):
+            todo_tool.sync(state.get("todos", []))
+
         tool_messages = []
         file_snapshots: Dict[str, str] = {}
+        updated_todos: List[dict] = []
 
         for tc in last_msg.tool_calls:
             name = tc.get("name", "")
@@ -117,6 +124,10 @@ def create_tools_node(tool_registry: ToolRegistry):
                     except Exception as e:
                         logger.warning(f"[FileSnapshot] 编辑后刷新失败 {path}: {e}")
 
-        return {"messages": tool_messages, "file_snapshots": file_snapshots}
+        # 收集更新后的 todos（如果有 set_todo 调用或需要同步现有状态）
+        if isinstance(todo_tool, TodoTool):
+            updated_todos = todo_tool.todos
+
+        return {"messages": tool_messages, "file_snapshots": file_snapshots, "todos": updated_todos}
 
     return tools_node

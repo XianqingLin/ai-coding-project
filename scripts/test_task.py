@@ -174,6 +174,11 @@ def main():
 
     setup_logging(level="INFO")
 
+    # 修复 Windows 控制台编码问题
+    if sys.stdout.encoding != "utf-8":
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
     task_dir = PROJECT_ROOT / args.tasks_dir / args.task
     if not task_dir.exists():
         print(f"❌ 错误: 任务目录不存在: {task_dir}")
@@ -202,9 +207,9 @@ def main():
     work_dir = Path(tempfile.mkdtemp(prefix=f"test-task-{args.task}-"))
     print(f"[Work] 工作目录: {work_dir}")
 
-    # 复制任务目录到工作目录作为 repo
+    # 复制任务目录到工作目录作为 repo（排除 tests 目录，避免 LLM 读到测试补丁）
     repo_dir = work_dir / "repo"
-    shutil.copytree(task_dir, repo_dir)
+    shutil.copytree(task_dir, repo_dir, ignore=shutil.ignore_patterns("tests"))
 
     original_dir = os.getcwd()
     os.chdir(repo_dir)

@@ -5,7 +5,7 @@
 """
 
 import time
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING, Dict, List
 
 from langchain_core.messages import SystemMessage
 
@@ -44,6 +44,20 @@ def _build_file_context_message(snapshots: Dict[str, str]) -> SystemMessage:
     return SystemMessage(content="\n".join(lines))
 
 
+def _build_todo_context_message(todos: List[dict]) -> SystemMessage:
+    """将任务列表格式化为 LLM 上下文消息."""
+    if not todos:
+        return SystemMessage(content="")
+
+    lines = ["## 当前任务列表"]
+    done_count = sum(1 for t in todos if t.get("done"))
+    for i, t in enumerate(todos, 1):
+        mark = "[x]" if t.get("done") else "[ ]"
+        lines.append(f"  {mark} {i}. {t['task']}")
+    lines.append(f"\n进度: {done_count}/{len(todos)} 已完成")
+    return SystemMessage(content="\n".join(lines))
+
+
 def create_llm_node(llm: "BaseChatModel"):
     """创建 LLM 节点函数.
 
@@ -60,14 +74,23 @@ def create_llm_node(llm: "BaseChatModel"):
 
         # 注入文件快照上下文（插入到 SystemMessage 之后）
         file_ctx_msg = _build_file_context_message(state.get("file_snapshots", {}))
+        todo_ctx_msg = _build_todo_context_message(state.get("todos", []))
+
+        insert_idx = 0
+        for i, m in enumerate(messages):
+            if isinstance(m, SystemMessage):
+                insert_idx = i + 1
+                break
+
         if file_ctx_msg.content:
-            insert_idx = 0
-            for i, m in enumerate(messages):
-                if isinstance(m, SystemMessage):
-                    insert_idx = i + 1
-                    break
             messages.insert(insert_idx, file_ctx_msg)
+            insert_idx += 1
             logger.debug(f"[LLM] 注入文件快照 | 文件数={len(state.get('file_snapshots', {}))}")
+
+        if todo_ctx_msg.content:
+            messages.insert(insert_idx, todo_ctx_msg)
+            insert_idx += 1
+            logger.debug(f"[LLM] 注入任务列表 | 任务数={len(state.get('todos', []))}")
 
         # 记录 LLM 输入摘要
         last_msg = messages[-1] if messages else None
