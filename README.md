@@ -164,9 +164,7 @@ ai-coding/
 │       ├── logger.py       # 日志系统
 │       └── tools/          # 工具系统
 │           ├── base.py     # Tool / ToolRegistry
-│           ├── file_tools.py   # 文件操作（read/write/str_replace/insert_after_line）
-│           ├── grep_tool.py    # 代码搜索
-│           ├── plan_tool.py    # 阶段切换计划
+│           ├── file_tools.py   # 文件操作（read/write/edit/grep/glob/list_dir）
 │           └── todo_tool.py    # 任务列表
 ├── docs/
 │   └── agent_function_gaps.md  # Agent 功能缺失清单

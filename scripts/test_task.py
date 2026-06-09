@@ -37,7 +37,7 @@ BUILTIN_MOCK_RESPONSES = {
         mock_tool_call("list_dir", {"path": "."}, content="看看目录结构"),
         mock_tool_call("read_file", {"path": "calculator.py"}, content="读取代码文件"),
         mock_tool_call(
-            "str_replace_file",
+            "edit_file",
             {
                 "path": "calculator.py",
                 "old_string": "# TODO: implement factorial\ndef factorial(n):\n    pass",
@@ -46,7 +46,7 @@ BUILTIN_MOCK_RESPONSES = {
             content="实现阶乘函数",
         ),
         mock_tool_call(
-            "str_replace_file",
+            "edit_file",
             {
                 "path": "calculator.py",
                 "old_string": "def divide(a, b):\n    return a / b",
@@ -67,7 +67,7 @@ BUILTIN_MOCK_RESPONSES = {
         mock_tool_call("read_file", {"path": "config.py"}, content="读取配置"),
         mock_tool_call("read_file", {"path": "app.py"}, content="读取应用代码"),
         mock_tool_call(
-            "str_replace_file",
+            "edit_file",
             {
                 "path": "config.py",
                 "old_string": 'APP_NAME = "MyApp"\nMAX_RETRIES = 3',
@@ -76,7 +76,7 @@ BUILTIN_MOCK_RESPONSES = {
             content="添加 TIMEOUT 配置",
         ),
         mock_tool_call(
-            "str_replace_file",
+            "edit_file",
             {
                 "path": "validator.py",
                 "old_string": "def validate_config(config):\n    # TODO: implement validation\n    pass",
@@ -85,7 +85,7 @@ BUILTIN_MOCK_RESPONSES = {
             content="实现配置验证逻辑",
         ),
         mock_tool_call(
-            "str_replace_file",
+            "edit_file",
             {
                 "path": "app.py",
                 "old_string": "from config import APP_NAME, MAX_RETRIES\nfrom validator import validate_config\n\n\ndef run_app():\n    config = {\"name\": APP_NAME, \"retries\": MAX_RETRIES}\n    validate_config(config)\n    print(f\"Running {APP_NAME} with {MAX_RETRIES} retries\")",

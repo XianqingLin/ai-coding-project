@@ -336,11 +336,11 @@ def compare_trajectories(current: List[Dict], previous_dir: Path) -> None:
     console.print(f"    之前: {'[green]是[/green]' if previous_has_plan else '[red]否[/red]'}")
 
     current_has_edit = any(
-        e.get("type") == "tool_call" and e.get("name") in ("str_replace_file", "write_file")
+        e.get("type") == "tool_call" and e.get("name") in ("edit_file", "write_file")
         for e in current
     )
     previous_has_edit = any(
-        e.get("type") == "tool_call" and e.get("name") in ("str_replace_file", "write_file")
+        e.get("type") == "tool_call" and e.get("name") in ("edit_file", "write_file")
         for e in previous
     )
     console.print(f"\n  [bold]是否执行编辑:[/bold]")

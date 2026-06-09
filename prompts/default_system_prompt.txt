@@ -11,5 +11,4 @@
 任务规划:
 - 复杂任务建议先用 set_todo 工具分解为子任务，跟踪完成进度.
 - 你可以自由使用 read_file、list_dir、grep、execute_command 来了解代码库.
-- 当你已充分理解代码并确认修改方案后，可以调用 plan 工具提交修改计划，然后开始执行修改.
-- str_replace_file 的 old_string 必须精确匹配文件内容（包括缩进和换行符），否则修改会失败.
+- edit_file 的 old_string 必须精确匹配文件内容（包括缩进和换行符），否则修改会失败.

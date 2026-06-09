@@ -51,7 +51,7 @@ def _parse_read_file_result(result: str) -> tuple[str, str]:
 
 
 def _extract_path_from_success(result: str) -> str:
-    """从 write_file/str_replace_file 成功消息中提取路径."""
+    """从 write_file/edit_file 成功消息中提取路径."""
     if "文件已写入:" in result:
         return result.split("文件已写入:", 1)[1].split("(")[0].strip()
     if "文件已编辑:" in result:
@@ -124,7 +124,7 @@ def create_tools_node(tool_registry: ToolRegistry):
                     file_snapshots[path] = args.get("content", "")
                     logger.debug(f"[FileSnapshot] 写入更新: {path}")
 
-            elif name in ("str_replace_file", "insert_after_line"):
+            elif name == "edit_file":
                 path = args.get("path", "")
                 if path and result.startswith("[成功]"):
                     try:
