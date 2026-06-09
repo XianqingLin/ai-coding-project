@@ -14,7 +14,6 @@
 import argparse
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 import traceback
@@ -29,48 +28,10 @@ from ai_coding.llm import create_lc_llm
 from ai_coding.logger import setup_logging
 from ai_coding.mock_llm import MockChatModel
 from ai_coding.tools import DEFAULT_TOOLS
-from eval_deepswe import save_model_patch
+from agent_common import verify_test_task
 
 
-def _verify_task(task_dir: Path, repo_dir: Path, task_work_dir: Path) -> dict:
-    """验证单个任务的修改."""
-    model_patch_path = task_work_dir / "model.patch"
-    has_changes = save_model_patch(repo_dir, model_patch_path)
 
-    if not has_changes:
-        return {"reward": 0, "reason": "no_changes"}
-
-    test_patch_path = (task_dir / "tests" / "test.patch").resolve()
-    if not test_patch_path.exists():
-        return {"reward": 0, "reason": "no_test_patch"}
-
-    result = subprocess.run(
-        ["git", "-C", str(repo_dir), "apply", "--whitespace=nowarn", str(test_patch_path)],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        return {"reward": 0, "reason": "test_patch_apply_failed", "stderr": result.stderr}
-
-    test_files = list(repo_dir.glob("test_*.py"))
-    if not test_files:
-        return {"reward": 0, "reason": "no_test_file"}
-
-    test_file = test_files[0]
-    result = subprocess.run(
-        ["python", str(test_file)],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    passed = result.returncode == 0
-
-    return {
-        "reward": 1 if passed else 0,
-        "reason": "passed" if passed else "test_failed",
-        "output": result.stdout,
-        "stderr": result.stderr,
-    }
 
 
 def main():
@@ -178,7 +139,7 @@ def main():
 
         print(f"\n{'='*60}")
         print("[Verification]")
-        verify_result = _verify_task(task_dir, repo_dir, task_work_dir)
+        verify_result = verify_test_task(task_dir, repo_dir, task_work_dir)
 
         reward = verify_result.get("reward", "N/A")
         if reward == 1:

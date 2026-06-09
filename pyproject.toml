@@ -30,6 +30,7 @@ dependencies = [
     "langchain>=1.0",
     "langgraph>=1.0",
     "langchain-openai>=1.0",
+    "tomli>=2.0;python_version<'3.11'",
 ]
 
 [project.optional-dependencies]
@@ -67,7 +68,7 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["test-tasks"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

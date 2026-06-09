@@ -1,10 +1,11 @@
 """Agent 运行共享逻辑.
 
-供 eval_deepswe.py、run_single.py、test_task.py 等脚本复用，
-消除重复的系统提示构建和 Go 环境注入代码.
+供 eval_deepswe.py、run_single.py、test_task.py、test_multi_task.py、
+test_approval_kimi.py 等脚本复用，消除重复代码.
 """
 
 import os
+import subprocess
 from pathlib import Path
 
 
@@ -41,3 +42,60 @@ def inject_go_env(project_root: Path) -> None:
         os.environ["PATH"] = str(go_bin) + os.pathsep + os.environ.get("PATH", "")
         os.environ["GOTOOLCHAIN"] = "local"
         os.environ["GOPROXY"] = "https://goproxy.cn,direct"
+
+
+def verify_test_task(task_dir: Path, repo_dir: Path, work_dir: Path) -> dict:
+    """运行 test-tasks 风格的验证.
+
+    1. 保存 agent 修改为 model.patch
+    2. 应用 test.patch
+    3. 运行生成的测试文件
+
+    Args:
+        task_dir: 原始任务目录（包含 tests/test.patch）.
+        repo_dir: Agent 工作后的代码目录.
+        work_dir: 临时工作目录（用于保存 model.patch）.
+
+    Returns:
+        {"reward": 0|1, "reason": str, "output": str|None, "stderr": str|None}
+    """
+    # 延迟导入避免循环依赖（eval_deepswe 也从本模块导入）
+    from eval_deepswe import save_model_patch
+
+    model_patch_path = work_dir / "model.patch"
+    has_changes = save_model_patch(repo_dir, model_patch_path)
+
+    if not has_changes:
+        return {"reward": 0, "reason": "no_changes"}
+
+    test_patch_path = (task_dir / "tests" / "test.patch").resolve()
+    if not test_patch_path.exists():
+        return {"reward": 0, "reason": "no_test_patch"}
+
+    result = subprocess.run(
+        ["git", "-C", str(repo_dir), "apply", "--whitespace=nowarn", str(test_patch_path)],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return {"reward": 0, "reason": "test_patch_apply_failed", "stderr": result.stderr}
+
+    test_files = list(repo_dir.glob("test_*.py"))
+    if not test_files:
+        return {"reward": 0, "reason": "no_test_file"}
+
+    test_file = test_files[0]
+    result = subprocess.run(
+        ["python", str(test_file)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    passed = result.returncode == 0
+
+    return {
+        "reward": 1 if passed else 0,
+        "reason": "passed" if passed else "test_failed",
+        "output": result.stdout,
+        "stderr": result.stderr,
+    }

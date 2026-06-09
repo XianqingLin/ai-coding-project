@@ -20,34 +20,10 @@ from ai_coding.agent.core import LangGraphAgent
 from ai_coding.llm import create_lc_llm
 from ai_coding.logger import setup_logging
 from ai_coding.tools import DEFAULT_TOOLS
-from eval_deepswe import save_model_patch
+from agent_common import verify_test_task
 
 
-def _verify_task(task_dir: Path, repo_dir: Path, work_dir: Path) -> dict:
-    import subprocess
 
-    model_patch_path = work_dir / "model.patch"
-    has_changes = save_model_patch(repo_dir, model_patch_path)
-    if not has_changes:
-        return {"reward": 0, "reason": "no_changes"}
-
-    test_patch_path = (task_dir / "tests" / "test.patch").resolve()
-    if not test_patch_path.exists():
-        return {"reward": 0, "reason": "no_test_patch"}
-
-    result = subprocess.run(
-        ["git", "-C", str(repo_dir), "apply", "--whitespace=nowarn", str(test_patch_path)],
-        capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        return {"reward": 0, "reason": "test_patch_apply_failed", "stderr": result.stderr}
-
-    test_files = list(repo_dir.glob("test_*.py"))
-    if not test_files:
-        return {"reward": 0, "reason": "no_test_file"}
-
-    result = subprocess.run(["python", str(test_files[0])], capture_output=True, text=True, timeout=60)
-    return {"reward": 1 if result.returncode == 0 else 0, "reason": "passed" if result.returncode == 0 else "test_failed"}
 
 
 def main():
@@ -101,7 +77,7 @@ def main():
         print("=" * 60)
 
         # 验证
-        verify_result = _verify_task(task_dir, repo_dir, work_dir)
+        verify_result = verify_test_task(task_dir, repo_dir, work_dir)
         print("\n[Verification]")
         if verify_result["reward"] == 1:
             print("[PASS] Validation passed")

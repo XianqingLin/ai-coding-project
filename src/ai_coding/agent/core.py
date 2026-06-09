@@ -191,7 +191,7 @@ class LangGraphAgent:
 
         if current_tokens > threshold:
             logger.warning(
-                f"[Compact] 上下文超阈值({current_tokens}/{self.short_term.token_budget}), "
+                f"[Compact] 上下文超阈值({current_tokens}/{self.context_compressor.token_budget}), "
                 f"自动触发压缩"
             )
             self.compact()

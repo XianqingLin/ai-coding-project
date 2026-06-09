@@ -47,7 +47,7 @@ class SessionManager:
 
     管理多个并发的 Agent 会话，支持创建、切换、列表、删除.
     会话元数据（名称、创建时间等）持久化到 JSON 文件；
-    Agent 对话状态由 MemorySaver 在内存中维护——进程重启后
+    Agent 对话状态由 AgentState 在内存中维护——进程重启后
     会话列表保留，但各会话的上下文历史需要重新建立.
 
     Attributes:

@@ -153,21 +153,24 @@ ai-coding/
 │       ├── __init__.py     # 包入口
 │       ├── __main__.py     # python -m ai_coding
 │       ├── main.py         # 程序入口
-│       ├── langgraph_agent.py  # ReAct Agent 核心（LangGraph）
+│       ├── config.py       # 环境变量配置
+│       ├── logger.py       # 日志系统
+│       ├── mock_llm.py     # Mock LLM（离线测试）
+│       ├── agent/          # Agent 核心
+│       │   ├── core.py         # LangGraph ReAct Agent 运行时
+│       │   ├── session.py      # 多会话管理
+│       │   ├── state.py        # AgentState 定义
+│       │   ├── context_compressor.py  # 上下文压缩
+│       │   └── nodes/          # 图节点（llm、tools、approval、edges）
 │       ├── llm/            # LLM 封装
 │       │   ├── kimi_chat.py    # KimiChatOpenAI（支持 reasoning_content）
 │       │   └── lc_llm.py       # LLM 工厂（Kimi/OpenAI/Mock）
-│       ├── lc_llm.py       # 【兼容重定向】保留旧导入路径
-│       ├── interface/      # 控制台交互
-│       │   └── textual_app.py  # TUI 界面
-│       ├── config.py       # 环境变量配置
-│       ├── logger.py       # 日志系统
 │       └── tools/          # 工具系统
-│           ├── base.py     # Tool / ToolRegistry
+│           ├── base.py         # Tool / ToolRegistry
 │           ├── file_tools.py   # 文件操作（read/write/edit/grep/glob/list_dir）
+│           ├── shell_tools.py  # Shell 命令执行（含后台任务）
+│           ├── task_tools.py   # 后台任务管理（task_list/output/stop）
 │           └── todo_tool.py    # 任务列表
-├── docs/
-│   └── agent_function_gaps.md  # Agent 功能缺失清单
 ├── .env                    # 环境变量（API Key 等）
 ├── .env.example            # 环境变量模板
 ├── .gitignore

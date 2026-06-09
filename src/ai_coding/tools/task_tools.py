@@ -5,7 +5,7 @@
 """
 
 import time
-from typing import List, Optional
+from typing import List
 
 from ai_coding.tools.base import Tool, ToolParameter
 from ai_coding.tools.shell_tools import ExecuteCommandTool

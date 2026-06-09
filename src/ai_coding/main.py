@@ -10,7 +10,7 @@ from pathlib import Path
 
 from ai_coding.config import DEFAULT_LLM_PROVIDER
 from ai_coding.llm import create_lc_llm
-from ai_coding.agent import LangGraphAgent, SessionManager
+from ai_coding.agent import SessionManager
 from ai_coding.logger import setup_logging, get_logger
 from ai_coding.tools import DEFAULT_TOOLS
 

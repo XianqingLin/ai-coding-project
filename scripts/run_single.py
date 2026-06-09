@@ -28,12 +28,10 @@ import sys
 import threading
 import time
 import traceback
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
 from rich.console import Console
-from rich.panel import Panel
 from rich.rule import Rule
 
 # Windows 终端兼容：避免 UnicodeEncodeError
@@ -60,7 +58,6 @@ from eval_deepswe import (
     _rmtree_ro,
     load_instruction,
     load_task_config,
-    save_model_patch,
     setup_repo,
     verify_task,
 )
@@ -321,19 +318,6 @@ def compare_trajectories(current: List[Dict], previous_dir: Path) -> None:
         console.print("  [green]  工具调用序列完全一致[/green]")
     else:
         console.print(f"\n  [yellow]共 {diff_count} 处差异[/yellow]")
-
-    # 对比最终状态
-    current_has_plan = any(
-        e.get("type") == "tool_call" and e.get("name") == "plan"
-        for e in current
-    )
-    previous_has_plan = any(
-        e.get("type") == "tool_call" and e.get("name") == "plan"
-        for e in previous
-    )
-    console.print(f"\n  [bold]是否调用 plan:[/bold]")
-    console.print(f"    当前: {'[green]是[/green]' if current_has_plan else '[red]否[/red]'}")
-    console.print(f"    之前: {'[green]是[/green]' if previous_has_plan else '[red]否[/red]'}")
 
     current_has_edit = any(
         e.get("type") == "tool_call" and e.get("name") in ("edit_file", "write_file")

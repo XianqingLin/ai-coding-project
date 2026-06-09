@@ -28,7 +28,8 @@ from ai_coding.llm import create_lc_llm
 from ai_coding.logger import setup_logging
 from ai_coding.mock_llm import MockChatModel, mock_tool_call, mock_text
 from ai_coding.tools import DEFAULT_TOOLS
-from eval_deepswe import load_instruction, save_model_patch
+from eval_deepswe import load_instruction
+from agent_common import verify_test_task
 
 
 # 内置的 Mock 响应序列（按任务名）
@@ -101,57 +102,6 @@ BUILTIN_MOCK_RESPONSES = {
         mock_text("任务完成！已修复并增强 simple-config-validation 的配置验证功能。"),
     ],
 }
-
-
-def _verify_test_task(task_dir: Path, repo_dir: Path, work_dir: Path) -> dict:
-    """运行 test-tasks 风格的验证.
-
-    1. 保存 agent 修改为 model.patch
-    2. 应用 test.patch
-    3. 运行生成的测试文件
-    """
-    import subprocess
-
-    # 保存 model.patch
-    model_patch_path = work_dir / "model.patch"
-    has_changes = save_model_patch(repo_dir, model_patch_path)
-
-    if not has_changes:
-        return {"reward": 0, "reason": "no_changes"}
-
-    # 读取并应用 test.patch
-    test_patch_path = (task_dir / "tests" / "test.patch").resolve()
-    if not test_patch_path.exists():
-        return {"reward": 0, "reason": "no_test_patch"}
-
-    result = subprocess.run(
-        ["git", "-C", str(repo_dir), "apply", "--whitespace=nowarn", str(test_patch_path)],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        return {"reward": 0, "reason": "test_patch_apply_failed", "stderr": result.stderr}
-
-    # 查找测试文件（test.patch 创建的 Python 测试文件）
-    test_files = list(repo_dir.glob("test_*.py"))
-    if not test_files:
-        return {"reward": 0, "reason": "no_test_file"}
-
-    test_file = test_files[0]
-    result = subprocess.run(
-        ["python", str(test_file)],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    passed = result.returncode == 0
-
-    return {
-        "reward": 1 if passed else 0,
-        "reason": "passed" if passed else "test_failed",
-        "output": result.stdout,
-        "stderr": result.stderr,
-    }
 
 
 def main():
@@ -246,7 +196,7 @@ def main():
         # 验证
         print(f"\n{'='*60}")
         print("[Verification]")
-        verify_result = _verify_test_task(task_dir, repo_dir, work_dir)
+        verify_result = verify_test_task(task_dir, repo_dir, work_dir)
 
         reward = verify_result.get("reward", "N/A")
         if reward == 1:
