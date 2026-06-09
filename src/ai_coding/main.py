@@ -355,7 +355,8 @@ def main() -> int:
 
     # 解析命令行参数
     verbose = "--verbose" in sys.argv or "-v" in sys.argv
-    cli_args = [a for a in sys.argv[1:] if a not in ("--verbose", "-v")]
+    auto_approve = "--auto-approve" in sys.argv
+    cli_args = [a for a in sys.argv[1:] if a not in ("--verbose", "-v", "--auto-approve")]
 
     # 解析项目根路径
     project_root = _resolve_project_root(cli_args)
@@ -375,6 +376,7 @@ def main() -> int:
     sm = SessionManager(
         llm_factory=lambda: create_lc_llm(provider),
         tools=DEFAULT_TOOLS,
+        auto_approve=auto_approve,
     )
 
     current = sm.current

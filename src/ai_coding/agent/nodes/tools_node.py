@@ -75,6 +75,12 @@ def create_tools_node(tool_registry: ToolRegistry):
         if not isinstance(last_msg, AIMessage) or not last_msg.tool_calls:
             return {"messages": [], "file_snapshots": {}}
 
+        # 从 messages 中提取已被拒绝的 tool_call_id（由 approval_gate 生成）
+        rejected_ids = set()
+        for msg in state["messages"]:
+            if isinstance(msg, ToolMessage) and "[系统] 用户拒绝了" in msg.content:
+                rejected_ids.add(msg.tool_call_id)
+
         # 同步 state 中的 todos 到 TodoTool 实例（确保跨轮次一致性）
         todo_tool = tool_registry.get("set_todo")
         if isinstance(todo_tool, TodoTool):
@@ -88,6 +94,11 @@ def create_tools_node(tool_registry: ToolRegistry):
             name = tc.get("name", "")
             args = tc.get("args", {})
             tool_id = tc.get("id", "")
+
+            # 跳过已被拒绝的调用
+            if tool_id in rejected_ids:
+                logger.info(f"[ToolsNode] 跳过已拒绝的调用: {name} ({tool_id})")
+                continue
 
             # 确保 args 是 dict
             if hasattr(args, "dict"):

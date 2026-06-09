@@ -63,11 +63,13 @@ class SessionManager:
         tools: Optional[List] = None,
         system_prompt: Optional[str] = None,
         storage_path: str = ".sessions/sessions.json",
+        auto_approve: bool = False,
     ) -> None:
         self.llm_factory = llm_factory
         self.tools = tools or []
         self.system_prompt = system_prompt
         self.storage_path = Path(storage_path)
+        self.auto_approve = auto_approve
         self.sessions: Dict[str, Session] = {}
         self.current_session_id: Optional[str] = None
 
@@ -125,6 +127,7 @@ class SessionManager:
             thread_id=thread_id,
             max_iterations=10,
             streaming=True,
+            auto_approve=self.auto_approve,
         )
 
     def create(self, name: str = "") -> str:

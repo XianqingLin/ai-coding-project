@@ -55,6 +55,7 @@ class Tool(ABC):
     
     name: str = ""
     description: str = ""
+    requires_approval: bool = False
     
     @property
     @abstractmethod

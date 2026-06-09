@@ -220,6 +220,7 @@ def main():
             tools=DEFAULT_TOOLS,
             max_iterations=args.max_iters,
             streaming=False,
+            auto_approve=True,
         )
 
         print(f"\n{'='*60}")

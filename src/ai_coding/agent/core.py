@@ -25,6 +25,7 @@ from langchain_core.messages import (
 from langgraph.graph import END, START, StateGraph, add_messages
 
 from ai_coding.agent.nodes import (
+    create_approval_gate,
     create_llm_node,
     create_should_continue,
     create_tools_node,
@@ -61,6 +62,7 @@ class LangGraphAgent:
         thread_id: Optional[str] = None,
         enable_short_term_memory: bool = True,
         short_term_memory_budget: int = 100000,
+        auto_approve: bool = False,
     ) -> None:
         self.llm = llm
         self.tools = tools or []
@@ -68,6 +70,7 @@ class LangGraphAgent:
         self.streaming = streaming
         self.system_prompt = system_prompt or self._build_system_prompt()
         self.thread_id = thread_id or uuid.uuid4().hex[:8]
+        self.auto_approve = auto_approve
 
         # 唯一状态源：自我管理容量的短期记忆容器
         self.state: Optional[AgentState] = None
@@ -99,18 +102,26 @@ class LangGraphAgent:
 
         builder = StateGraph(AgentState)
         builder.add_node("llm", create_llm_node(llm=bound_llm))
+        builder.add_node("approval", create_approval_gate(
+            tool_registry=self.tool_registry,
+            interactive=not self.auto_approve,
+        ))
         builder.add_node(
             "tools",
             create_tools_node(tool_registry=self.tool_registry),
         )
 
-        # 图拓扑：START -> LLM -> (条件) -> 工具 -> 回到 LLM
+        # 图拓扑：START -> LLM -> (条件) -> approval -> 工具 -> 回到 LLM
         builder.add_edge(START, "llm")
         builder.add_conditional_edges(
             "llm",
-            create_should_continue(),
-            {"tools": "tools", END: END},
+            create_should_continue(
+                tool_registry=self.tool_registry,
+                auto_approve=self.auto_approve,
+            ),
+            {"approval": "approval", "tools": "tools", END: END},
         )
+        builder.add_edge("approval", "tools")
         builder.add_edge("tools", "llm")
 
         return builder.compile()
@@ -132,7 +143,7 @@ class LangGraphAgent:
             if self.system_prompt:
                 messages.append(SystemMessage(content=self.system_prompt))
             messages.append(HumanMessage(content=user_input))
-            return {"messages": messages, "file_snapshots": {}, "todos": []}
+            return {"messages": messages, "file_snapshots": {}, "todos": [], "globally_approved_tools": []}
 
         # 复制现有历史并追加用户输入
         messages = list(self.state["messages"]) + [HumanMessage(content=user_input)]
@@ -140,6 +151,7 @@ class LangGraphAgent:
             "messages": messages,
             "file_snapshots": dict(self.state.get("file_snapshots", {})),
             "todos": [dict(t) for t in self.state.get("todos", [])],
+            "globally_approved_tools": list(self.state.get("globally_approved_tools", [])),
         }
 
     def compact(self) -> str:
@@ -251,6 +263,7 @@ class LangGraphAgent:
             "messages": list(initial.get("messages", [])),
             "file_snapshots": dict(initial.get("file_snapshots", {})),
             "todos": list(initial.get("todos", [])),
+            "globally_approved_tools": list(initial.get("globally_approved_tools", [])),
         }
 
         try:
@@ -310,6 +323,8 @@ class LangGraphAgent:
                         current_state["file_snapshots"].update(update["file_snapshots"])
                     if "todos" in update:
                         current_state["todos"] = list(update["todos"])
+                    if "globally_approved_tools" in update:
+                        current_state["globally_approved_tools"] = list(update["globally_approved_tools"])
 
             elapsed = time.time() - start_time
             logger.info(f"[轨迹] Agent 完成 | 总耗时={elapsed:.1f}s | 步骤={step}")

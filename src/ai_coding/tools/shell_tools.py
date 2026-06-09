@@ -13,6 +13,7 @@ class ExecuteCommandTool(Tool):
     """执行 shell 命令."""
 
     name = "execute_command"
+    requires_approval = True
     description = (
         "执行 shell 命令. 用于运行测试、安装依赖、构建项目、查看目录结构等操作. "
         "谨慎使用有破坏性的命令."

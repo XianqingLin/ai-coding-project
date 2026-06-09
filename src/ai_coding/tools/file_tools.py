@@ -76,6 +76,7 @@ class WriteFileTool(Tool):
     """写入或覆盖文件内容."""
 
     name = "write_file"
+    requires_approval = True
     description = (
         "向指定文件写入内容. 如果文件已存在, 将覆盖原有内容. "
         "用于创建新文件或完全重写文件. 这也是完成任务的核心工具之一, "
@@ -108,6 +109,7 @@ class StrReplaceFileTool(Tool):
     """在文件中查找并替换指定内容."""
 
     name = "str_replace_file"
+    requires_approval = True
     description = (
         "在文件中查找并替换指定内容块. 这是修改现有文件的核心工具.\n"
         "old_string 必须在文件中**唯一出现**；如果不唯一，系统会提示你增加上下文.\n"
@@ -213,6 +215,7 @@ class InsertAfterLineTool(Tool):
     """在指定行后插入内容."""
 
     name = "insert_after_line"
+    requires_approval = True
     description = (
         "在文件的指定行号之后插入新内容.\n"
         "常用于在函数后添加新函数、在结构体中添加新字段等场景."

@@ -23,6 +23,11 @@ def replace_todos(left: List[dict], right: List[dict]) -> List[dict]:
     return list(right) if right is not None else list(left)
 
 
+def merge_approved_tools(left: List[str], right: List[str]) -> List[str]:
+    """合并已授权工具列表：取并集."""
+    return list(set(left) | set(right))
+
+
 class AgentState(TypedDict):
     """Agent 图状态 —— 自我管理容量的短期记忆容器.
 
@@ -35,3 +40,4 @@ class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
     file_snapshots: Annotated[Dict[str, str], merge_file_snapshots]
     todos: Annotated[List[dict], replace_todos]
+    globally_approved_tools: Annotated[List[str], merge_approved_tools]
