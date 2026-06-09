@@ -143,7 +143,7 @@ class LangGraphAgent:
             if self.system_prompt:
                 messages.append(SystemMessage(content=self.system_prompt))
             messages.append(HumanMessage(content=user_input))
-            return {"messages": messages, "file_snapshots": {}, "todos": [], "globally_approved_tools": []}
+            return {"messages": messages, "file_snapshots": {}, "todos": [], "globally_approved_tools": [], "background_tasks": []}
 
         # 复制现有历史并追加用户输入
         messages = list(self.state["messages"]) + [HumanMessage(content=user_input)]
@@ -152,6 +152,7 @@ class LangGraphAgent:
             "file_snapshots": dict(self.state.get("file_snapshots", {})),
             "todos": [dict(t) for t in self.state.get("todos", [])],
             "globally_approved_tools": list(self.state.get("globally_approved_tools", [])),
+            "background_tasks": list(self.state.get("background_tasks", [])),
         }
 
     def compact(self) -> str:
@@ -264,6 +265,7 @@ class LangGraphAgent:
             "file_snapshots": dict(initial.get("file_snapshots", {})),
             "todos": list(initial.get("todos", [])),
             "globally_approved_tools": list(initial.get("globally_approved_tools", [])),
+            "background_tasks": list(initial.get("background_tasks", [])),
         }
 
         try:
@@ -325,6 +327,8 @@ class LangGraphAgent:
                         current_state["todos"] = list(update["todos"])
                     if "globally_approved_tools" in update:
                         current_state["globally_approved_tools"] = list(update["globally_approved_tools"])
+                    if "background_tasks" in update:
+                        current_state["background_tasks"] = list(update["background_tasks"])
 
             elapsed = time.time() - start_time
             logger.info(f"[轨迹] Agent 完成 | 总耗时={elapsed:.1f}s | 步骤={step}")

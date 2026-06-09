@@ -13,9 +13,12 @@ from ai_coding.tools.file_tools import (
     GlobTool,
 )
 from ai_coding.tools.shell_tools import ExecuteCommandTool
+from ai_coding.tools.task_tools import TaskListTool, TaskOutputTool, TaskStopTool
 from ai_coding.tools.todo_tool import TodoTool
 
 # 默认工具集
+execute_tool = ExecuteCommandTool()
+
 DEFAULT_TOOLS = [
     ReadFileTool(),
     WriteFileTool(),
@@ -23,7 +26,10 @@ DEFAULT_TOOLS = [
     ListDirTool(),
     GrepTool(),
     GlobTool(),
-    ExecuteCommandTool(),
+    execute_tool,
+    TaskListTool(task_manager=execute_tool),
+    TaskOutputTool(task_manager=execute_tool),
+    TaskStopTool(task_manager=execute_tool),
     TodoTool(),
 ]
 
@@ -39,6 +45,9 @@ __all__ = [
     "GrepTool",
     "GlobTool",
     "ExecuteCommandTool",
+    "TaskListTool",
+    "TaskOutputTool",
+    "TaskStopTool",
     "TodoTool",
     "DEFAULT_TOOLS",
 ]

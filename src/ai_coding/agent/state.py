@@ -28,6 +28,11 @@ def merge_approved_tools(left: List[str], right: List[str]) -> List[str]:
     return list(set(left) | set(right))
 
 
+def replace_background_tasks(left: List[dict], right: List[dict]) -> List[dict]:
+    """替换后台任务列表：右侧非空则直接覆盖."""
+    return list(right) if right is not None else list(left)
+
+
 class AgentState(TypedDict):
     """Agent 图状态 —— 自我管理容量的短期记忆容器.
 
@@ -35,9 +40,11 @@ class AgentState(TypedDict):
       显式压缩后替换，确保体积可控。llm_node 直接消费，不再二次压缩。
     - file_snapshots: 当前最新文件内容快照（工具执行后更新，LLM 调用前注入）
     - todos: 当前任务列表（工具执行后更新，LLM 调用前注入）
+    - background_tasks: 后台任务状态列表（工具执行后更新）
     """
 
     messages: Annotated[Sequence[BaseMessage], add_messages]
     file_snapshots: Annotated[Dict[str, str], merge_file_snapshots]
     todos: Annotated[List[dict], replace_todos]
     globally_approved_tools: Annotated[List[str], merge_approved_tools]
+    background_tasks: Annotated[List[dict], replace_background_tasks]

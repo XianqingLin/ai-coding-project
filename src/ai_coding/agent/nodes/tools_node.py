@@ -10,6 +10,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 from ai_coding.agent.state import AgentState
 from ai_coding.logger import get_logger
 from ai_coding.tools.base import ToolRegistry
+from ai_coding.tools.shell_tools import ExecuteCommandTool
 from ai_coding.tools.todo_tool import TodoTool
 
 logger = get_logger(__name__)
@@ -86,9 +87,23 @@ def create_tools_node(tool_registry: ToolRegistry):
         if isinstance(todo_tool, TodoTool):
             todo_tool.sync(state.get("todos", []))
 
+        # 同步 state 中的 background_tasks 到 ExecuteCommandTool 实例
+        exec_tool = tool_registry.get("execute_command")
+        if isinstance(exec_tool, ExecuteCommandTool):
+            # 将 state 中的任务信息合并到 exec_tool（保留 _proc/_file 引用）
+            for t in state.get("background_tasks", []):
+                tid = t.get("task_id")
+                if tid and tid in exec_tool._bg_tasks:
+                    # 保留内部引用，只更新可序列化字段
+                    old = exec_tool._bg_tasks[tid]
+                    for k, v in t.items():
+                        if not k.startswith("_"):
+                            old[k] = v
+
         tool_messages = []
         file_snapshots: Dict[str, str] = {}
         updated_todos: List[dict] = []
+        updated_bg_tasks: List[dict] = []
 
         for tc in last_msg.tool_calls:
             name = tc.get("name", "")
@@ -139,6 +154,15 @@ def create_tools_node(tool_registry: ToolRegistry):
         if isinstance(todo_tool, TodoTool):
             updated_todos = todo_tool.todos
 
-        return {"messages": tool_messages, "file_snapshots": file_snapshots, "todos": updated_todos}
+        # 收集更新后的后台任务状态
+        if isinstance(exec_tool, ExecuteCommandTool):
+            updated_bg_tasks = exec_tool.background_tasks()
+
+        return {
+            "messages": tool_messages,
+            "file_snapshots": file_snapshots,
+            "todos": updated_todos,
+            "background_tasks": updated_bg_tasks,
+        }
 
     return tools_node
