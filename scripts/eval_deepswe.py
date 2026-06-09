@@ -16,7 +16,6 @@ import re
 import shutil
 import subprocess
 import sys
-import threading
 import time
 import traceback
 from datetime import datetime
@@ -31,9 +30,11 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from ai_coding.config import DEFAULT_LLM_PROVIDER
 from ai_coding.llm import create_lc_llm
-from ai_coding.langgraph_agent import LangGraphAgent
+from ai_coding.agent import LangGraphAgent
 from ai_coding.logger import setup_logging
 from ai_coding.tools import DEFAULT_TOOLS
+
+from agent_common import build_system_prompt, inject_go_env
 
 
 _log_file: Any = None
@@ -171,7 +172,6 @@ def _downgrade_go_mod(repo_dir: Path) -> None:
         return
     try:
         content = go_mod.read_text(encoding="utf-8")
-        import re
         m = re.search(r"^go\s+(\d+)\.(\d+)$", content, re.MULTILINE)
         if m:
             major, minor = int(m.group(1)), int(m.group(2))
@@ -210,47 +210,22 @@ def run_agent_in_repo(
 
         # 注入项目级便携版 Go 环境（优先于系统 Go）
         project_root = Path(__file__).parent.parent.resolve()
+        inject_go_env(project_root)
         go_bin = project_root / "deep-swe" / "go" / "bin"
-        if go_bin.exists() and str(go_bin) not in os.environ.get("PATH", ""):
-            os.environ["PATH"] = str(go_bin) + os.pathsep + os.environ.get("PATH", "")
-            # 禁止 Go 自动下载 toolchain（网络可能不通）
-            os.environ["GOTOOLCHAIN"] = "local"
-            # 使用国内代理加速依赖下载
-            os.environ["GOPROXY"] = "https://goproxy.cn,direct"
+        if go_bin.exists():
             go_ver = subprocess.run([str(go_bin / "go.exe"), "version"], capture_output=True, text=True).stdout.strip()
             log(f"  Injected Go: {go_bin} ({go_ver})")
-            # 如果 go.mod 要求的版本高于本地 Go，降级以避免 toolchain 下载失败
-            _downgrade_go_mod(repo_dir)
+        # 如果 go.mod 要求的版本高于本地 Go，降级以避免 toolchain 下载失败
+        _downgrade_go_mod(repo_dir)
 
         # 创建 agent（使用适合 SWE 任务的系统提示）
         llm = create_lc_llm(DEFAULT_LLM_PROVIDER)
-
-        swe_system_prompt = (
-            "你是一个软件工程 agent，专门负责修改代码来完成给定的开发任务。\n"
-            "当前你位于一个代码仓库的根目录中。\n\n"
-            "你的工作流程（严格按此顺序执行）：\n"
-            "1. 探索：使用 read_file、grep、list_dir 理解代码库。"
-            "读 3-5 个关键文件后，你就必须停止探索。\n"
-            "2. Plan：调用 plan 工具提交修改计划。这是进入修改阶段的唯一方式。\n"
-            "3. Edit：调用 plan 后的下一步**必须**是 str_replace_file 或 write_file。"
-            "不允许在 plan 后继续 read_file/grep/list_dir。\n"
-            "4. Verify：修改完成后运行测试验证。\n\n"
-            "绝对规则（违反会导致任务失败）：\n"
-            "- 不调用 plan 就无法开始修改。\n"
-            "- 调用 plan 后必须立即 edit，不能在 plan 后继续探索。\n"
-            "- 不要在探索上浪费超过 5-8 步。\n"
-            "- str_replace_file 要求 old_string 在文件中唯一出现，增加上下文确保唯一性。\n"
-            "- 修改应该最小化，只改动必要的部分。\n"
-            "- plan 不需要完美，提交初步方案即可，执行中可以调整。\n\n"
-            "可以使用 set_todo 工具分解复杂任务，跟踪子任务进度。\n"
-        )
-
         agent = LangGraphAgent(
             llm=llm,
             tools=DEFAULT_TOOLS,
             max_iterations=max_iterations,
             streaming=False,
-            system_prompt=swe_system_prompt,
+            system_prompt=build_system_prompt(),
         )
 
         # 使用 run_with_trace 收集完整 trajectory

@@ -6,7 +6,7 @@
 import difflib
 import os
 import subprocess
-from typing import List, Optional, Tuple
+from typing import List
 
 from ai_coding.tools.base import Tool, ToolParameter
 

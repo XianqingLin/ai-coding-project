@@ -35,7 +35,6 @@ from typing import Any, Dict, List
 from rich.console import Console
 from rich.panel import Panel
 from rich.rule import Rule
-from rich.text import Text
 
 # Windows 终端兼容：避免 UnicodeEncodeError
 if os.name == "nt":
@@ -49,9 +48,11 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from ai_coding.config import DEFAULT_LLM_PROVIDER
 from ai_coding.llm import create_lc_llm
-from ai_coding.langgraph_agent import LangGraphAgent
+from ai_coding.agent import LangGraphAgent
 from ai_coding.logger import setup_logging
 from ai_coding.tools import DEFAULT_TOOLS
+
+from agent_common import build_system_prompt, inject_go_env
 
 # 从 eval_deepswe 复用核心函数
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
@@ -137,12 +138,7 @@ def run_agent_step_mode(
     try:
         os.chdir(repo_dir)
 
-        # 注入便携版 Go 环境
-        go_bin = PROJECT_ROOT / "deep-swe" / "go" / "bin"
-        if go_bin.exists() and str(go_bin) not in os.environ.get("PATH", ""):
-            os.environ["PATH"] = str(go_bin) + os.pathsep + os.environ.get("PATH", "")
-            os.environ["GOTOOLCHAIN"] = "local"
-            os.environ["GOPROXY"] = "https://goproxy.cn,direct"
+        inject_go_env(PROJECT_ROOT)
 
         llm = create_lc_llm(provider)
         agent = LangGraphAgent(
@@ -223,12 +219,7 @@ def run_agent_normal(
     try:
         os.chdir(repo_dir)
 
-        # 注入便携版 Go 环境
-        go_bin = PROJECT_ROOT / "deep-swe" / "go" / "bin"
-        if go_bin.exists() and str(go_bin) not in os.environ.get("PATH", ""):
-            os.environ["PATH"] = str(go_bin) + os.pathsep + os.environ.get("PATH", "")
-            os.environ["GOTOOLCHAIN"] = "local"
-            os.environ["GOPROXY"] = "https://goproxy.cn,direct"
+        inject_go_env(PROJECT_ROOT)
 
         llm = create_lc_llm(provider)
         agent = LangGraphAgent(
@@ -286,40 +277,6 @@ def run_agent_normal(
 
     finally:
         os.chdir(original_dir)
-
-
-def build_system_prompt(prompt_path: str | None) -> str:
-    """构建系统提示.
-
-    如果提供了 prompt 文件路径，读取其内容作为完整系统提示。
-    否则使用默认的 SWE 系统提示.
-    """
-    if prompt_path:
-        p = Path(prompt_path)
-        if p.exists():
-            return p.read_text(encoding="utf-8")
-        else:
-            console.print(f"[yellow]警告: 提示文件不存在: {prompt_path}，使用默认提示[/yellow]")
-
-    return (
-        "你是一个软件工程 agent，专门负责修改代码来完成给定的开发任务。\n"
-        "当前你位于一个代码仓库的根目录中。\n\n"
-        "你的工作流程（严格按此顺序执行）：\n"
-        "1. 探索：使用 read_file、grep、list_dir 理解代码库。"
-        "读 3-5 个关键文件后，你就必须停止探索。\n"
-        "2. Plan：调用 plan 工具提交修改计划。这是进入修改阶段的唯一方式。\n"
-        "3. Edit：调用 plan 后的下一步**必须**是 str_replace_file 或 write_file。"
-        "不允许在 plan 后继续 read_file/grep/list_dir。\n"
-        "4. Verify：修改完成后运行测试验证。\n\n"
-        "绝对规则（违反会导致任务失败）：\n"
-        "- 不调用 plan 就无法开始修改。\n"
-        "- 调用 plan 后必须立即 edit，不能在 plan 后继续探索。\n"
-        "- 不要在探索上浪费超过 5-8 步。\n"
-        "- str_replace_file 要求 old_string 在文件中唯一出现，增加上下文确保唯一性。\n"
-        "- 修改应该最小化，只改动必要的部分。\n"
-        "- plan 不需要完美，提交初步方案即可，执行中可以调整。\n\n"
-        "可以使用 set_todo 工具分解复杂任务，跟踪子任务进度。\n"
-    )
 
 
 def compare_trajectories(current: List[Dict], previous_dir: Path) -> None:

@@ -4,7 +4,9 @@
 """
 
 from langchain_core.messages import AIMessage
-from langgraph.graph import END, MessagesState
+from langgraph.graph import END
+
+from ai_coding.agent.state import AgentState
 
 
 def create_should_continue():
@@ -14,7 +16,7 @@ def create_should_continue():
         符合 LangGraph conditional_edges 签名的 callable.
     """
 
-    def should_continue(state: MessagesState):
+    def should_continue(state: AgentState):
         """判断是否需要继续调用工具."""
         last_msg = state["messages"][-1]
         if isinstance(last_msg, AIMessage) and last_msg.tool_calls:

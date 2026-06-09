@@ -9,7 +9,6 @@ from ai_coding.tools.file_tools import (
     WriteFileTool,
     StrReplaceFileTool,
     InsertAfterLineTool,
-
     ListDirTool,
     ExecuteCommandTool,
 )
@@ -38,7 +37,6 @@ __all__ = [
     "ToolRegistry",
     "ReadFileTool",
     "WriteFileTool",
-    "StrReplaceFileTool",
     "StrReplaceFileTool",
     "InsertAfterLineTool",
 

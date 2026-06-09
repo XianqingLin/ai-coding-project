@@ -1,0 +1,13 @@
+{
+  "sessions": {
+    "32799c77": {
+      "session_id": "32799c77",
+      "name": "default",
+      "created_at": 1780646200.2998002,
+      "updated_at": 1780646200.2998002,
+      "message_count": 0,
+      "thread_id": "0923c8a3"
+    }
+  },
+  "current_session_id": "32799c77"
+}
