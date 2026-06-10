@@ -1,61 +1,20 @@
+/* Claude Code 风格全局样式 */
+
 Screen {
-    align: center middle;
-}
-
-#main {
-    height: 100%;
-}
-
-#sidebar {
-    width: 25;
-    background: $surface;
-    border-right: solid $primary;
-    padding: 1;
-}
-
-#sidebar-title {
-    text-align: center;
-    text-style: bold;
-    height: 1;
-}
-
-#session-list {
-    height: 1fr;
-    border: solid $primary-darken-2;
-}
-
-#content {
-    width: 1fr;
+    background: $surface-darken-1;
+    layout: vertical;
 }
 
 #status-bar {
+    dock: top;
     height: 1;
-    background: $primary-darken-2;
-    color: $text;
-    padding: 0 2;
 }
 
-#app-title {
-    width: 30%;
-}
-
-#model-label {
-    width: 40%;
-    content-align: center middle;
-}
-
-#status-label {
-    width: 30%;
-    content-align: right middle;
-}
-
-#message-log {
+#chat-log {
     height: 1fr;
-    border: solid $primary-darken-2;
-    padding: 1;
 }
 
-#command-input {
-    height: 3;
-    border: solid $primary;
+#input-bar {
+    dock: bottom;
+    height: auto;
 }
