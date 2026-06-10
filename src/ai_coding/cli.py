@@ -97,7 +97,7 @@ def chat(
         raise typer.Exit(code)
 
     from ai_coding.tui import run_tui
-    run_tui(work_dir=work_dir, auto_approve=auto_approve)
+    run_tui(work_dir=work_dir, auto_approve=auto_approve, verbose=verbose)
 
 
 @session_app.command("list")
