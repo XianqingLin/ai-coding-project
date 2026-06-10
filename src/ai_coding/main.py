@@ -345,8 +345,45 @@ def _run_repl(sm: SessionManager, verbose: bool = False) -> None:
             print(f"\n[Assistant] {result}")
 
 
+def start_chat_session(work_dir: str, auto_approve: bool = False, verbose: bool = False) -> int:
+    """启动交互式聊天会话（供 CLI 调用）.
+
+    Args:
+        work_dir: 项目工作目录.
+        auto_approve: 是否自动批准工具调用.
+        verbose: 是否启用详细输出.
+
+    Returns:
+        退出状态码 (0 表示成功).
+
+    """
+    os.chdir(work_dir)
+
+    provider = DEFAULT_LLM_PROVIDER
+
+    try:
+        llm = create_lc_llm(provider)
+    except Exception as e:
+        print(f"[Error] {e}")
+        return 1
+
+    sm = SessionManager(
+        llm_factory=lambda: create_lc_llm(provider),
+        tools=DEFAULT_TOOLS,
+        auto_approve=auto_approve,
+        work_dir=work_dir,
+    )
+
+    current = sm.current
+    session_name = current.name if current else "default"
+
+    _print_welcome(Path(work_dir), provider, llm.model_name, session_name)
+    _run_repl(sm, verbose=verbose)
+    return 0
+
+
 def main() -> int:
-    """程序主入口.
+    """程序主入口（兼容旧版命令行调用）.
 
     Returns:
         退出状态码 (0 表示成功).
@@ -362,31 +399,7 @@ def main() -> int:
     # 解析项目根路径
     project_root = _resolve_project_root(cli_args)
 
-    # 切换到项目目录（工具操作都基于此目录）
-    os.chdir(project_root)
-
-    provider = DEFAULT_LLM_PROVIDER
-
-    try:
-        llm = create_lc_llm(provider)
-    except Exception as e:
-        print(f"[Error] {e}")
-        return 1
-
-    # 使用 SessionManager 管理多会话
-    sm = SessionManager(
-        llm_factory=lambda: create_lc_llm(provider),
-        tools=DEFAULT_TOOLS,
-        auto_approve=auto_approve,
-        work_dir=str(project_root),
-    )
-
-    current = sm.current
-    session_name = current.name if current else "default"
-
-    _print_welcome(project_root, provider, llm.model_name, session_name)
-    _run_repl(sm, verbose=verbose)
-    return 0
+    return start_chat_session(str(project_root), auto_approve=auto_approve, verbose=verbose)
 
 
 if __name__ == "__main__":

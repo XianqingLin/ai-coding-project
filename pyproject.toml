@@ -30,6 +30,7 @@ dependencies = [
     "langchain>=1.0",
     "langgraph>=1.0",
     "langchain-openai>=1.0",
+    "typer>=0.12",
     "tomli>=2.0;python_version<'3.11'",
 ]
 
@@ -44,7 +45,7 @@ dev = [
 ]
 
 [project.scripts]
-ai-coding = "ai_coding.main:main"
+ai-coding = "ai_coding.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/yourusername/ai-coding"
