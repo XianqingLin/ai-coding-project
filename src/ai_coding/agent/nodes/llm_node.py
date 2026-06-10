@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Dict, List
 from langchain_core.messages import SystemMessage
 
 from ai_coding.agent.state import AgentState
+from ai_coding.sub_agent_manager import SubAgentManager
 from ai_coding.logger import get_logger
 
 if TYPE_CHECKING:
@@ -40,6 +41,27 @@ def _build_file_context_message(snapshots: Dict[str, str]) -> SystemMessage:
             lines.append(f"{head}\n...（省略 {total - FILE_SNAPSHOT_MAX_LINES} 行）...\n{tail}")
         else:
             lines.append(content)
+
+    return SystemMessage(content="\n".join(lines))
+
+
+def _build_sub_agent_context_message(manager: SubAgentManager) -> SystemMessage:
+    """将已完成的子 Agent 结果格式化为 LLM 上下文消息."""
+    pending = manager.get_pending_notifications()
+    if not pending:
+        return SystemMessage(content="")
+
+    lines = ["## 子 Agent 结果"]
+    for inst in pending:
+        status_emoji = "[OK]" if inst.status == "completed" else "[ERR]"
+        lines.append(
+            f"\n{status_emoji} [{inst.agent_type}] {inst.instance_id}"
+        )
+        lines.append(f"任务: {inst.task}")
+        result_preview = inst.result[:2000]
+        if len(inst.result) > 2000:
+            result_preview += "\n... (结果已截断)"
+        lines.append(f"结果:\n{result_preview}")
 
     return SystemMessage(content="\n".join(lines))
 
@@ -92,6 +114,14 @@ def create_llm_node(llm: "BaseChatModel"):
             insert_idx += 1
             logger.debug(f"[LLM] 注入任务列表 | 任务数={len(state.get('todos', []))}")
 
+        # 注入已完成的子 Agent 结果
+        manager = SubAgentManager()
+        sub_agent_ctx_msg = _build_sub_agent_context_message(manager)
+        if sub_agent_ctx_msg.content:
+            messages.insert(insert_idx, sub_agent_ctx_msg)
+            insert_idx += 1
+            logger.info(f"[LLM] 注入子 Agent 结果 | 数量={len(manager.get_pending_notifications())}")
+
         # 记录 LLM 输入摘要
         last_msg = messages[-1] if messages else None
         last_content = (
@@ -120,6 +150,18 @@ def create_llm_node(llm: "BaseChatModel"):
             )
             logger.debug(f"[LLM OUT] content={response.content[:500]!r}")
 
-        return {"messages": [response]}
+        # 标记已通知的子 Agent
+        updated_sub_agents = list(state.get("sub_agents", []))
+        if sub_agent_ctx_msg.content:
+            pending = manager.get_pending_notifications()
+            for inst in pending:
+                manager.mark_notified(inst.instance_id)
+            # 同步 manager 状态到 state 列表
+            updated_sub_agents = [manager.to_dict(i) for i in manager.list_instances()]
+
+        return {
+            "messages": [response],
+            "sub_agents": updated_sub_agents,
+        }
 
     return llm_node

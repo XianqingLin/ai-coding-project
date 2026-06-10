@@ -43,6 +43,11 @@ def replace_plan_file_path(left: str, right: str) -> str:
     return str(right) if right is not None else str(left)
 
 
+def replace_sub_agents(left: List[dict], right: List[dict]) -> List[dict]:
+    """替换子 Agent 列表：右侧非 None 则直接覆盖."""
+    return list(right) if right is not None else list(left)
+
+
 class AgentState(TypedDict):
     """Agent 图状态 —— 自我管理容量的短期记忆容器.
 
@@ -60,3 +65,4 @@ class AgentState(TypedDict):
     background_tasks: Annotated[List[dict], replace_background_tasks]
     plan_mode: Annotated[bool, replace_plan_mode]
     plan_file_path: Annotated[str, replace_plan_file_path]
+    sub_agents: Annotated[List[dict], replace_sub_agents]

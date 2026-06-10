@@ -148,12 +148,18 @@ def create_tools_node(tool_registry: ToolRegistry):
                 rejected_ids.add(msg.tool_call_id)
 
         # 同步 state 中的 todos 到 TodoTool 实例（确保跨轮次一致性）
-        todo_tool = tool_registry.get("set_todo")
+        try:
+            todo_tool = tool_registry.get("set_todo")
+        except KeyError:
+            todo_tool = None
         if isinstance(todo_tool, TodoTool):
             todo_tool.sync(state.get("todos", []))
 
         # 同步 state 中的 background_tasks 到 ExecuteCommandTool 实例
-        exec_tool = tool_registry.get("execute_command")
+        try:
+            exec_tool = tool_registry.get("execute_command")
+        except KeyError:
+            exec_tool = None
         if isinstance(exec_tool, ExecuteCommandTool):
             # 将 state 中的任务信息合并到 exec_tool（保留 _proc/_file 引用）
             for t in state.get("background_tasks", []):
@@ -310,6 +316,9 @@ def create_tools_node(tool_registry: ToolRegistry):
         if isinstance(exec_tool, ExecuteCommandTool):
             updated_bg_tasks = exec_tool.background_tasks()
 
+        # 收集子 Agent 状态（透传 state 中的 sub_agents）
+        updated_sub_agents = list(state.get("sub_agents", []))
+
         return {
             "messages": tool_messages,
             "file_snapshots": file_snapshots,
@@ -317,6 +326,7 @@ def create_tools_node(tool_registry: ToolRegistry):
             "background_tasks": updated_bg_tasks,
             "plan_mode": plan_mode,
             "plan_file_path": plan_file_path,
+            "sub_agents": updated_sub_agents,
         }
 
     return tools_node

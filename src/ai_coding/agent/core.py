@@ -54,7 +54,7 @@ class LangGraphAgent:
 
     def __init__(
         self,
-        llm,
+        llm=None,
         tools: Optional[List[Tool]] = None,
         max_iterations: int = 10,
         streaming: bool = True,
@@ -63,8 +63,12 @@ class LangGraphAgent:
         enable_short_term_memory: bool = True,
         short_term_memory_budget: int = 100000,
         auto_approve: bool = False,
+        llm_factory=None,
     ) -> None:
         self.llm = llm
+        self.llm_factory = llm_factory
+        if llm_factory and not llm:
+            self.llm = llm_factory()
         self.tools = tools or []
         self.max_iterations = max_iterations
         self.streaming = streaming
@@ -78,6 +82,9 @@ class LangGraphAgent:
         # 依赖组装
         self.tool_registry = ToolRegistry()
         for tool in self.tools:
+            # 向子 Agent 派发工具注入 LLM 依赖
+            if hasattr(tool, "set_llm") and callable(getattr(tool, "set_llm")):
+                tool.set_llm(self.llm, self.llm_factory)
             self.tool_registry.register(tool)
 
         # 容量管理工具：用于 compact 和 _maybe_compact
@@ -143,7 +150,7 @@ class LangGraphAgent:
             if self.system_prompt:
                 messages.append(SystemMessage(content=self.system_prompt))
             messages.append(HumanMessage(content=user_input))
-            return {"messages": messages, "file_snapshots": {}, "todos": [], "globally_approved_tools": [], "background_tasks": [], "plan_mode": False, "plan_file_path": ""}
+            return {"messages": messages, "file_snapshots": {}, "todos": [], "globally_approved_tools": [], "background_tasks": [], "plan_mode": False, "plan_file_path": "", "sub_agents": []}
 
         # 复制现有历史并追加用户输入
         messages = list(self.state["messages"]) + [HumanMessage(content=user_input)]
@@ -155,6 +162,7 @@ class LangGraphAgent:
             "background_tasks": list(self.state.get("background_tasks", [])),
             "plan_mode": bool(self.state.get("plan_mode", False)),
             "plan_file_path": str(self.state.get("plan_file_path", "")),
+            "sub_agents": list(self.state.get("sub_agents", [])),
         }
 
     def compact(self) -> str:
@@ -270,6 +278,7 @@ class LangGraphAgent:
             "background_tasks": list(initial.get("background_tasks", [])),
             "plan_mode": bool(initial.get("plan_mode", False)),
             "plan_file_path": str(initial.get("plan_file_path", "")),
+            "sub_agents": list(initial.get("sub_agents", [])),
         }
 
         try:
@@ -337,6 +346,8 @@ class LangGraphAgent:
                         current_state["plan_mode"] = bool(update["plan_mode"])
                     if "plan_file_path" in update:
                         current_state["plan_file_path"] = str(update["plan_file_path"])
+                    if "sub_agents" in update:
+                        current_state["sub_agents"] = list(update["sub_agents"])
 
             elapsed = time.time() - start_time
             logger.info(f"[轨迹] Agent 完成 | 总耗时={elapsed:.1f}s | 步骤={step}")
