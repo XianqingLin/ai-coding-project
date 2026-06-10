@@ -3,17 +3,24 @@
 负责执行工具调用，并根据工具类型更新文件快照.
 """
 
-from typing import Dict, List
+import os
+import sys
+from typing import Any, Dict, List
 
 from langchain_core.messages import AIMessage, ToolMessage
 
 from ai_coding.agent.state import AgentState
 from ai_coding.logger import get_logger
 from ai_coding.tools.base import ToolRegistry
+from ai_coding.tools.plan_tools import EnterPlanModeTool, ExitPlanModeTool
 from ai_coding.tools.shell_tools import ExecuteCommandTool
 from ai_coding.tools.todo_tool import TodoTool
 
 logger = get_logger(__name__)
+
+# ExitPlanMode 交互保留词
+_EXIT_RESERVED = {"a", "approve", "r", "reject", "x", "reject and exit",
+                   "v", "revise", "q", "quit"}
 
 
 def _parse_read_file_result(result: str) -> tuple[str, str]:
@@ -60,6 +67,64 @@ def _extract_path_from_success(result: str) -> str:
     return ""
 
 
+def _extract_plan_path(result: str) -> str:
+    """从 enter_plan_mode 返回结果中提取计划文件路径."""
+    for line in result.split("\n"):
+        if line.startswith("计划文件路径:"):
+            return line.replace("计划文件路径:", "").strip()
+    return ""
+
+
+def _prompt_plan_approval(plan_content: str, options: List[Dict[str, str]]) -> str:
+    """交互式呈现计划并等待用户选择.
+
+    Returns:
+        "approve", "reject", "reject_and_exit", "revise", 或某个 option label.
+    """
+    print("\n[Plan Approval]")
+    print("=" * 50)
+    print(plan_content if plan_content.strip() else "(计划文件为空)")
+    print("=" * 50)
+
+    print("\n[选项]")
+    print("  a) Approve")
+    print("  r) Reject")
+    print("  x) Reject and Exit")
+    print("  v) Revise")
+    for i, opt in enumerate(options, 1):
+        print(f"  {i}) {opt['label']} - {opt.get('description', '')}")
+
+    while True:
+        try:
+            choice = input("\n请选择 [a/r/x/v" + "".join(str(i + 1) for i in range(len(options))) + "/q]: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n[系统] 用户取消输入，默认拒绝并退出 Plan 模式。")
+            return "reject_and_exit"
+
+        cl = choice.lower()
+        if cl in ("q", "quit"):
+            print("\n[系统] 用户退出会话。")
+            sys.exit(0)
+        if cl in ("a", "approve"):
+            return "approve"
+        if cl in ("r", "reject"):
+            return "reject"
+        if cl in ("x", "reject and exit"):
+            return "reject_and_exit"
+        if cl in ("v", "revise"):
+            return "revise"
+
+        # 检查是否选了某个 option
+        try:
+            idx = int(cl) - 1
+            if 0 <= idx < len(options):
+                return options[idx]["label"]
+        except ValueError:
+            pass
+
+        print("无效选项，请重新输入。")
+
+
 def create_tools_node(tool_registry: ToolRegistry):
     """创建 Tools 节点函数.
 
@@ -104,6 +169,8 @@ def create_tools_node(tool_registry: ToolRegistry):
         file_snapshots: Dict[str, str] = {}
         updated_todos: List[dict] = []
         updated_bg_tasks: List[dict] = []
+        plan_mode = bool(state.get("plan_mode", False))
+        plan_file_path = str(state.get("plan_file_path", ""))
 
         for tc in last_msg.tool_calls:
             name = tc.get("name", "")
@@ -121,6 +188,91 @@ def create_tools_node(tool_registry: ToolRegistry):
             elif not isinstance(args, dict):
                 args = dict(args)
 
+            # ---------- Plan 模式约束 ----------
+            if plan_mode and name in ("write_file", "edit_file"):
+                target = args.get("path", "")
+                if target != plan_file_path:
+                    msg = (
+                        f"[错误] Plan 模式下只能修改计划文件 '{plan_file_path}'，"
+                        f"不允许写入 '{target}'"
+                    )
+                    tool_messages.append(ToolMessage(content=msg, tool_call_id=tool_id))
+                    logger.warning(f"[PlanMode] 拦截 {name} 到非计划文件: {target}")
+                    continue
+
+            if plan_mode and name == "task_stop":
+                msg = "[错误] Plan 模式下不能使用 task_stop 工具"
+                tool_messages.append(ToolMessage(content=msg, tool_call_id=tool_id))
+                logger.warning("[PlanMode] 拦截 task_stop")
+                continue
+
+            # ---------- enter_plan_mode 特殊处理 ----------
+            if name == "enter_plan_mode":
+                result = tool_registry.execute(name, args)
+                tool_messages.append(ToolMessage(content=result, tool_call_id=tool_id))
+                extracted = _extract_plan_path(result)
+                if extracted:
+                    plan_mode = True
+                    plan_file_path = extracted
+                    logger.info(f"[PlanMode] 已进入 Plan 模式，计划文件: {plan_file_path}")
+                continue
+
+            # ---------- exit_plan_mode 特殊处理 ----------
+            if name == "exit_plan_mode":
+                if not plan_mode:
+                    msg = "[错误] 当前不在 Plan 模式中"
+                    tool_messages.append(ToolMessage(content=msg, tool_call_id=tool_id))
+                    continue
+
+                # 读取计划文件内容
+                plan_content = ""
+                if plan_file_path and os.path.exists(plan_file_path):
+                    try:
+                        with open(plan_file_path, "r", encoding="utf-8") as f:
+                            plan_content = f.read()
+                    except Exception as e:
+                        plan_content = f"(读取计划文件失败: {e})"
+
+                # 解析 options
+                raw_options = args.get("options", [])
+                options: List[Dict[str, str]] = []
+                if isinstance(raw_options, list):
+                    for opt in raw_options:
+                        if isinstance(opt, dict) and "label" in opt:
+                            options.append({
+                                "label": str(opt["label"]),
+                                "description": str(opt.get("description", "")),
+                            })
+
+                choice = _prompt_plan_approval(plan_content, options)
+
+                if choice == "approve":
+                    plan_mode = False
+                    plan_file_path = ""
+                    msg = "[成功] 计划已批准，已退出 Plan 模式。现在可以执行计划中的操作。"
+                    logger.info("[PlanMode] 用户批准计划，已退出 Plan 模式")
+                elif choice == "reject":
+                    msg = "[系统] 用户拒绝了计划。请根据反馈修改计划后重试。"
+                    logger.info("[PlanMode] 用户拒绝计划，保持 Plan 模式")
+                elif choice == "reject_and_exit":
+                    plan_mode = False
+                    plan_file_path = ""
+                    msg = "[系统] 用户拒绝了计划并退出 Plan 模式。"
+                    logger.info("[PlanMode] 用户拒绝并退出 Plan 模式")
+                elif choice == "revise":
+                    msg = "[系统] 用户要求修改计划。请根据反馈修改计划文件后重试。"
+                    logger.info("[PlanMode] 用户要求修改计划，保持 Plan 模式")
+                else:
+                    # 用户选择了某个 option
+                    plan_mode = False
+                    plan_file_path = ""
+                    msg = f"[成功] 用户选择了方案 '{choice}'，已退出 Plan 模式。请按该方案执行。"
+                    logger.info(f"[PlanMode] 用户选择方案 '{choice}'，已退出 Plan 模式")
+
+                tool_messages.append(ToolMessage(content=msg, tool_call_id=tool_id))
+                continue
+
+            # ---------- 常规工具执行 ----------
             result = tool_registry.execute(name, args)
             tool_messages.append(ToolMessage(content=result, tool_call_id=tool_id))
 
@@ -163,6 +315,8 @@ def create_tools_node(tool_registry: ToolRegistry):
             "file_snapshots": file_snapshots,
             "todos": updated_todos,
             "background_tasks": updated_bg_tasks,
+            "plan_mode": plan_mode,
+            "plan_file_path": plan_file_path,
         }
 
     return tools_node

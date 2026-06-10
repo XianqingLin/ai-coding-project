@@ -143,7 +143,7 @@ class LangGraphAgent:
             if self.system_prompt:
                 messages.append(SystemMessage(content=self.system_prompt))
             messages.append(HumanMessage(content=user_input))
-            return {"messages": messages, "file_snapshots": {}, "todos": [], "globally_approved_tools": [], "background_tasks": []}
+            return {"messages": messages, "file_snapshots": {}, "todos": [], "globally_approved_tools": [], "background_tasks": [], "plan_mode": False, "plan_file_path": ""}
 
         # 复制现有历史并追加用户输入
         messages = list(self.state["messages"]) + [HumanMessage(content=user_input)]
@@ -153,6 +153,8 @@ class LangGraphAgent:
             "todos": [dict(t) for t in self.state.get("todos", [])],
             "globally_approved_tools": list(self.state.get("globally_approved_tools", [])),
             "background_tasks": list(self.state.get("background_tasks", [])),
+            "plan_mode": bool(self.state.get("plan_mode", False)),
+            "plan_file_path": str(self.state.get("plan_file_path", "")),
         }
 
     def compact(self) -> str:
@@ -266,6 +268,8 @@ class LangGraphAgent:
             "todos": list(initial.get("todos", [])),
             "globally_approved_tools": list(initial.get("globally_approved_tools", [])),
             "background_tasks": list(initial.get("background_tasks", [])),
+            "plan_mode": bool(initial.get("plan_mode", False)),
+            "plan_file_path": str(initial.get("plan_file_path", "")),
         }
 
         try:
@@ -329,6 +333,10 @@ class LangGraphAgent:
                         current_state["globally_approved_tools"] = list(update["globally_approved_tools"])
                     if "background_tasks" in update:
                         current_state["background_tasks"] = list(update["background_tasks"])
+                    if "plan_mode" in update:
+                        current_state["plan_mode"] = bool(update["plan_mode"])
+                    if "plan_file_path" in update:
+                        current_state["plan_file_path"] = str(update["plan_file_path"])
 
             elapsed = time.time() - start_time
             logger.info(f"[轨迹] Agent 完成 | 总耗时={elapsed:.1f}s | 步骤={step}")

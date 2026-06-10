@@ -12,6 +12,7 @@ from ai_coding.tools.file_tools import (
     GrepTool,
     GlobTool,
 )
+from ai_coding.tools.plan_tools import EnterPlanModeTool, ExitPlanModeTool
 from ai_coding.tools.shell_tools import ExecuteCommandTool
 from ai_coding.tools.task_tools import TaskListTool, TaskOutputTool, TaskStopTool
 from ai_coding.tools.todo_tool import TodoTool
@@ -26,6 +27,8 @@ DEFAULT_TOOLS = [
     ListDirTool(),
     GrepTool(),
     GlobTool(),
+    EnterPlanModeTool(),
+    ExitPlanModeTool(),
     execute_tool,
     TaskListTool(task_manager=execute_tool),
     TaskOutputTool(task_manager=execute_tool),
@@ -49,5 +52,7 @@ __all__ = [
     "TaskOutputTool",
     "TaskStopTool",
     "TodoTool",
+    "EnterPlanModeTool",
+    "ExitPlanModeTool",
     "DEFAULT_TOOLS",
 ]

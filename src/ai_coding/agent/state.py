@@ -33,6 +33,16 @@ def replace_background_tasks(left: List[dict], right: List[dict]) -> List[dict]:
     return list(right) if right is not None else list(left)
 
 
+def replace_plan_mode(left: bool, right: bool) -> bool:
+    """替换 Plan 模式状态：右侧非 None 则覆盖."""
+    return bool(right) if right is not None else bool(left)
+
+
+def replace_plan_file_path(left: str, right: str) -> str:
+    """替换计划文件路径：右侧非 None 则覆盖."""
+    return str(right) if right is not None else str(left)
+
+
 class AgentState(TypedDict):
     """Agent 图状态 —— 自我管理容量的短期记忆容器.
 
@@ -48,3 +58,5 @@ class AgentState(TypedDict):
     todos: Annotated[List[dict], replace_todos]
     globally_approved_tools: Annotated[List[str], merge_approved_tools]
     background_tasks: Annotated[List[dict], replace_background_tasks]
+    plan_mode: Annotated[bool, replace_plan_mode]
+    plan_file_path: Annotated[str, replace_plan_file_path]
