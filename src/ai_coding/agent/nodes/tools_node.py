@@ -12,6 +12,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 from ai_coding.agent.state import AgentState
 from ai_coding.logger import get_logger
 from ai_coding.tools.base import ToolRegistry
+from ai_coding.tools.collaboration_tools import AskUserQuestionTool
 from ai_coding.tools.plan_tools import EnterPlanModeTool, ExitPlanModeTool
 from ai_coding.tools.shell_tools import ExecuteCommandTool
 from ai_coding.tools.todo_tool import TodoTool
@@ -276,6 +277,21 @@ def create_tools_node(tool_registry: ToolRegistry):
                     logger.info(f"[PlanMode] 用户选择方案 '{choice}'，已退出 Plan 模式")
 
                 tool_messages.append(ToolMessage(content=msg, tool_call_id=tool_id))
+                continue
+
+            # ---------- ask_user_question 特殊处理 ----------
+            if name == "ask_user_question":
+                question = args.get("question", "")
+                options = args.get("options", [])
+                multi_select = args.get("multi_select", False)
+                ask_tool = tool_registry.get("ask_user_question")
+                if isinstance(ask_tool, AskUserQuestionTool):
+                    result = ask_tool.execute(
+                        question=question,
+                        options=options,
+                        multi_select=multi_select,
+                    )
+                    tool_messages.append(ToolMessage(content=result, tool_call_id=tool_id))
                 continue
 
             # ---------- 常规工具执行 ----------

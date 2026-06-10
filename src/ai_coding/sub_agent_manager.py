@@ -79,7 +79,7 @@ class SubAgentManager:
     def dispatch(
         self,
         agent_type: str,
-        task: str,
+        prompt: str,
         llm: Any,
         llm_factory: Optional[Callable[[], Any]] = None,
         run_in_background: bool = False,
@@ -89,7 +89,7 @@ class SubAgentManager:
 
         Args:
             agent_type: 子 Agent 类型 (coder / explore / plan)
-            task: 任务描述
+            prompt: 任务描述
             llm: 主 Agent 的 LLM 实例（作为备选）
             llm_factory: LLM 工厂函数，用于创建独立 LLM 实例
             run_in_background: 是否后台运行
@@ -99,7 +99,7 @@ class SubAgentManager:
             运行结果（同步模式）或任务 ID（后台模式）
         """
         if instance_id and instance_id in self._agents:
-            return self._resume_instance(instance_id, task, llm, llm_factory, run_in_background)
+            return self._resume_instance(instance_id, prompt, llm, llm_factory, run_in_background)
 
         # 创建新实例
         sid = f"sub_{uuid.uuid4().hex[:8]}"
@@ -124,7 +124,7 @@ class SubAgentManager:
         instance = SubAgentInstance(
             instance_id=sid,
             agent_type=agent_type,
-            task=task,
+            task=prompt,
             agent=agent,
         )
 
@@ -142,12 +142,24 @@ class SubAgentManager:
             return (
                 f"[子 Agent 后台启动] ID: {sid}\n"
                 f"类型: {agent_type}\n"
-                f"任务: {task[:200]}\n"
-                f"可使用 get_sub_agent_result(instance_id='{sid}') 查询结果。"
+                f"任务: {prompt[:200]}\n"
+                f"完成后结果将自动回到主 Agent。"
             )
 
-        # 同步运行
-        self._run_agent(sid)
+        # 同步运行（带 30 分钟超时）
+        thread = threading.Thread(
+            target=self._run_agent,
+            args=(sid,),
+            daemon=True,
+        )
+        thread.start()
+        thread.join(timeout=1800)
+        if thread.is_alive():
+            with self._lock:
+                self._agents[sid].status = "failed"
+                self._agents[sid].result = "[错误] 子 Agent 执行超时（30 分钟）"
+            logger.warning(f"[SubAgent] {sid} 执行超时（30 分钟）")
+
         with self._lock:
             inst = self._agents[sid]
         return inst.result
@@ -178,7 +190,7 @@ class SubAgentManager:
     def _resume_instance(
         self,
         instance_id: str,
-        task: str,
+        prompt: str,
         llm: Any,
         llm_factory: Optional[Callable[[], Any]],
         run_in_background: bool,
@@ -193,7 +205,7 @@ class SubAgentManager:
             return f"[错误] 实例 {instance_id} 仍在运行中，请等待完成"
 
         # 更新任务和状态
-        instance.task = task
+        instance.task = prompt
         instance.status = "running"
         instance.result = ""
         instance.notified = False
@@ -224,11 +236,8 @@ class SubAgentManager:
         if instance.agent.state is not None:
             from langchain_core.messages import HumanMessage
             messages = list(instance.agent.state.get("messages", []))
-            messages.append(HumanMessage(content=task))
+            messages.append(HumanMessage(content=prompt))
             instance.agent.state["messages"] = messages
-        else:
-            # 如果 state 为空，让 run() 自己初始化
-            pass
 
         if run_in_background:
             thread = threading.Thread(
@@ -240,10 +249,23 @@ class SubAgentManager:
             return (
                 f"[子 Agent 唤回并后台运行] ID: {instance_id}\n"
                 f"类型: {instance.agent_type}\n"
-                f"新任务: {task[:200]}"
+                f"新任务: {prompt[:200]}"
             )
 
-        self._run_agent(instance_id)
+        # 同步运行（带 30 分钟超时）
+        thread = threading.Thread(
+            target=self._run_agent,
+            args=(instance_id,),
+            daemon=True,
+        )
+        thread.start()
+        thread.join(timeout=1800)
+        if thread.is_alive():
+            with self._lock:
+                self._agents[instance_id].status = "failed"
+                self._agents[instance_id].result = "[错误] 子 Agent 执行超时（30 分钟）"
+            logger.warning(f"[SubAgent] {instance_id} 执行超时（30 分钟）")
+
         return instance.result
 
     def get_instance(self, instance_id: str) -> Optional[SubAgentInstance]:

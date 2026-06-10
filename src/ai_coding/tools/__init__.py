@@ -12,12 +12,8 @@ from ai_coding.tools.file_tools import (
     GrepTool,
     GlobTool,
 )
+from ai_coding.tools.collaboration_tools import AgentTool, AskUserQuestionTool
 from ai_coding.tools.plan_tools import EnterPlanModeTool, ExitPlanModeTool
-from ai_coding.tools.sub_agent_tools import (
-    DispatchSubAgentTool,
-    GetSubAgentResultTool,
-    ListSubAgentsTool,
-)
 from ai_coding.tools.shell_tools import ExecuteCommandTool
 from ai_coding.tools.task_tools import TaskListTool, TaskOutputTool, TaskStopTool
 from ai_coding.tools.todo_tool import TodoTool
@@ -34,9 +30,8 @@ DEFAULT_TOOLS = [
     GlobTool(),
     EnterPlanModeTool(),
     ExitPlanModeTool(),
-    DispatchSubAgentTool(),
-    ListSubAgentsTool(),
-    GetSubAgentResultTool(),
+    AskUserQuestionTool(),
+    AgentTool(),
     execute_tool,
     TaskListTool(task_manager=execute_tool),
     TaskOutputTool(task_manager=execute_tool),
@@ -62,8 +57,7 @@ __all__ = [
     "TodoTool",
     "EnterPlanModeTool",
     "ExitPlanModeTool",
-    "DispatchSubAgentTool",
-    "ListSubAgentsTool",
-    "GetSubAgentResultTool",
+    "AskUserQuestionTool",
+    "AgentTool",
     "DEFAULT_TOOLS",
 ]
