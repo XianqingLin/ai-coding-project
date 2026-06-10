@@ -1,11 +1,10 @@
-"""AI Coding TUI 应用 —— Kimi Code CLI 风格（REPL + bottom_toolbar）.
+"""AI Coding TUI 应用 —— Kimi Code CLI 风格（Application 固定布局）.
 
 特点：
-- 不清屏，保留终端历史
-- 消息像普通终端输出一样向上滚动
-- 输入框紧跟在最后一条消息下方
-- 底部状态栏显示模型/状态/路径/context
-- Welcome 信息作为历史消息的第一条
+- 全屏固定布局（可滚动历史 + 边框输入框 + 状态栏）
+- 不清除主屏幕（使用 alternate screen，退出后恢复）
+- Welcome Panel 作为历史消息第一条
+- 无背景色，透明终端风格
 """
 
 import os
@@ -13,11 +12,17 @@ import threading
 from typing import List, Optional, Tuple
 
 from rich.console import Console
+from rich.panel import Panel
 
-from prompt_toolkit import PromptSession
-from prompt_toolkit.formatted_text import HTML
-from prompt_toolkit.history import FileHistory
+from prompt_toolkit.application import Application
+from prompt_toolkit.buffer import Buffer
+from prompt_toolkit.formatted_text import ANSI
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.layout import HSplit, Layout, Window
+from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
+from prompt_toolkit.layout.processors import BeforeInput
 from prompt_toolkit.styles import Style as PtkStyle
+from prompt_toolkit.widgets import Frame
 
 from ai_coding.agent import SessionManager
 from ai_coding.agent.core import DEFAULT_CONTEXT_LIMIT
@@ -27,20 +32,9 @@ from ai_coding.logger import setup_logging
 from ai_coding.tui.render import render_markdown
 from ai_coding.tools import DEFAULT_TOOLS
 
-# Rich console 用于消息输出
-console = Console(highlight=False)
-
-
-def _get_history_path() -> str:
-    """获取 prompt_toolkit 历史记录文件路径."""
-    from pathlib import Path
-    home = Path.home() / ".ai-coding"
-    home.mkdir(parents=True, exist_ok=True)
-    return str(home / "tui_history")
-
 
 class AICodingApp:
-    """AI Coding TUI 主应用（REPL 风格）."""
+    """AI Coding TUI 主应用."""
 
     def __init__(
         self,
@@ -50,57 +44,144 @@ class AICodingApp:
         self.sm = sm
         self.verbose = verbose
         self._status_text = "Ready"
-        self._streaming = False
+        self._history_entries: List[Tuple[str, str]] = []
+        self._console_width = 80
+        self._history_console = self._make_console(80)
 
-        self._build_session()
-        self._print_welcome()
+        self._build_layout()
 
     # ------------------------------------------------------------------ #
-    # 会话构建
+    # 内部工具
     # ------------------------------------------------------------------ #
 
-    def _build_session(self) -> None:
-        """构建 PromptSession."""
-        style = PtkStyle.from_dict({
-            "prompt": "#f9e2af bold",
-            "bottom-toolbar": "bg:#11111b #6c7086",
-            "bottom-toolbar.text": "#6c7086",
-        })
-
-        self.session = PromptSession(
-            message=HTML("<prompt>></prompt> "),
-            multiline=False,
-            history=FileHistory(_get_history_path()),
-            bottom_toolbar=self._get_bottom_toolbar,
-            style=style,
+    def _make_console(self, width: int) -> Console:
+        """创建用于历史渲染的 Rich Console."""
+        return Console(
+            force_terminal=True,
+            color_system="standard",
+            width=width,
+            highlight=False,
         )
 
-    def _get_bottom_toolbar(self) -> HTML:
-        """生成底部状态栏文本."""
-        agent = self.sm.get_current_agent()
-        context_info = ""
-        if agent and hasattr(agent, "get_context_usage"):
-            try:
-                usage = agent.get_context_usage()
-                pct = usage.get("percentage", 0.0)
-                used = usage.get("used_tokens", 0)
-                limit = usage.get("limit_tokens", 0)
-                context_info = (
-                    f"  context: {pct}% ({used / 1000:.1f}k/{limit / 1000:.1f}k)"
-                )
-            except Exception:
-                pass
-
-        left = f"{DEFAULT_LLM_PROVIDER}  {self._status_text}  {self.sm.work_dir}"
-        right = context_info
-        return HTML(f"<bottom-toolbar>{left}{right}</bottom-toolbar>")
+    def _update_console_width(self) -> None:
+        """根据终端宽度更新 Console."""
+        try:
+            width = self.app.output.get_size().columns
+            width = max(width - 4, 40)
+        except Exception:
+            width = 80
+        if width != self._console_width:
+            self._console_width = width
+            self._history_console = self._make_console(width)
 
     # ------------------------------------------------------------------ #
-    # 渲染输出
+    # 布局构建
     # ------------------------------------------------------------------ #
 
-    def _print_welcome(self) -> None:
-        """打印欢迎信息（作为消息历史的第一条）."""
+    def _build_layout(self) -> None:
+        """构建 prompt_toolkit Application 布局."""
+
+        # 历史消息区（可滚动，占据剩余空间）
+        self.history_control = FormattedTextControl(self._get_history_text)
+        self.history_window = Window(
+            content=self.history_control,
+            wrap_lines=True,
+            always_hide_cursor=True,
+            allow_scroll_beyond_bottom=True,
+        )
+
+        # 输入框（带边框）
+        self.input_buffer = Buffer(multiline=True)
+        self.input_buffer.accept_handler = self._on_accept
+        input_control = BufferControl(
+            buffer=self.input_buffer,
+            input_processors=[BeforeInput("> ")],
+            key_bindings=self._create_input_kb(),
+        )
+        input_window = Window(
+            content=input_control,
+            height=3,
+            wrap_lines=True,
+        )
+        input_frame = Frame(body=input_window)
+
+        # 状态栏
+        self.status_control = FormattedTextControl(self._get_status_text)
+        status_window = Window(
+            content=self.status_control,
+            height=1,
+        )
+
+        # 全局键绑定
+        kb = KeyBindings()
+
+        @kb.add("c-c")
+        @kb.add("c-q")
+        def _(event):
+            """Ctrl+C / Ctrl+Q 退出."""
+            event.app.exit()
+
+        # 布局：历史区（可滚动）| 输入框（边框）| 状态栏
+        layout = Layout(
+            HSplit([
+                self.history_window,
+                input_frame,
+                status_window,
+            ])
+        )
+
+        self.app = Application(
+            layout=layout,
+            key_bindings=kb,
+            full_screen=True,
+            erase_when_done=False,
+            style=self._get_style(),
+            mouse_support=True,
+        )
+
+    def _create_input_kb(self) -> KeyBindings:
+        """创建输入框键绑定."""
+        kb = KeyBindings()
+
+        @kb.add("enter")
+        def _(event):
+            """Enter 提交."""
+            event.current_buffer.validate_and_handle()
+
+        @kb.add("c-j")
+        def _(event):
+            """Ctrl+J 插入换行."""
+            event.current_buffer.insert_text("\n")
+
+        return kb
+
+    def _get_style(self) -> PtkStyle:
+        """定义 prompt_toolkit 样式（无背景色）."""
+        return PtkStyle.from_dict({
+            "frame.border": "#4a90e2",
+            "prompt": "#f9e2af bold",
+            "statusbar": "#6c7086",
+        })
+
+    # ------------------------------------------------------------------ #
+    # 内容生成
+    # ------------------------------------------------------------------ #
+
+    def _get_history_text(self) -> ANSI:
+        """生成历史消息文本（Rich ANSI，包含 Welcome）."""
+        self._update_console_width()
+
+        with self._history_console.capture() as capture:
+            # Welcome 作为第一条消息
+            self._render_welcome_to_console()
+            # 历史消息
+            for role, text in self._history_entries:
+                self._render_entry_to_console(role, text)
+
+        return ANSI(capture.get())
+
+    def _render_welcome_to_console(self) -> None:
+        """渲染 Welcome Panel 到历史 Console."""
         current = self.sm.current
         session_name = current.name if current else "default"
         lines = [
@@ -111,71 +192,91 @@ class AICodingApp:
             f"[dim]Session:[/dim]   {session_name}",
             f"[dim]Model:[/dim]     {DEFAULT_LLM_PROVIDER}",
         ]
-        # 用蓝色边框的 Panel 样式模拟 Kimi Code CLI 的 Welcome Panel
-        from rich.panel import Panel
         welcome_text = "\n".join(lines)
-        console.print(Panel(welcome_text, border_style="#4a90e2", padding=(0, 1)))
-        console.print()
+        panel = Panel(welcome_text, border_style="#4a90e2", padding=(0, 1))
+        self._history_console.print(panel)
+        self._history_console.print()
 
-    def _print_user_input(self, text: str) -> None:
-        """打印用户输入（黄色 > 前缀）."""
-        console.print(f"[bold #f9e2af]> {text}[/bold #f9e2af]")
+    def _render_entry_to_console(self, role: str, text: str) -> None:
+        """将单条消息渲染到历史 Console."""
+        if role == "user":
+            self._history_console.print(f"[bold #f9e2af]> {text}[/bold #f9e2af]")
+        elif role == "assistant":
+            renderable = render_markdown(text)
+            self._history_console.print("[#cdd6f4]● [/#cdd6f4]", end="")
+            self._history_console.print(renderable)
+        elif role == "thinking":
+            self._history_console.print(f"[italic #6c7086]● {text}[/italic #6c7086]")
+        elif role == "tool":
+            self._history_console.print(f"[#f9e2af]● {text}[/#f9e2af]")
+        elif role == "error":
+            self._history_console.print(f"[#f38ba8]● {text}[/#f38ba8]")
+        elif role == "system":
+            self._history_console.print(f"[#6c7086]● {text}[/#6c7086]")
+        else:
+            self._history_console.print(text)
 
-    def _print_assistant(self, text: str) -> None:
-        """打印 AI 回复（白色 ● 前缀 + Rich 渲染）."""
-        renderable = render_markdown(text)
-        # 先打印前缀，然后渲染内容
-        console.print("[#cdd6f4]● [/#cdd6f4]", end="")
-        console.print(renderable)
-
-    def _print_thinking(self, text: str) -> None:
-        """打印思考过程（灰色斜体 ● 前缀）."""
-        console.print(f"[italic #6c7086]● {text}[/italic #6c7086]")
-
-    def _print_tool(self, text: str) -> None:
-        """打印工具调用（黄色 ● 前缀）."""
-        console.print(f"[#f9e2af]● {text}[/#f9e2af]")
-
-    def _print_error(self, text: str) -> None:
-        """打印错误（红色 ● 前缀）."""
-        console.print(f"[#f38ba8]● {text}[/#f38ba8]")
-
-    def _print_system(self, text: str) -> None:
-        """打印系统消息（灰色 ● 前缀）."""
-        console.print(f"[#6c7086]● {text}[/#6c7086]")
-
-    # ------------------------------------------------------------------ #
-    # 主循环
-    # ------------------------------------------------------------------ #
-
-    def run(self) -> None:
-        """启动主循环."""
-        while True:
+    def _get_status_text(self) -> List[Tuple[str, str]]:
+        """生成状态栏文本（左右对齐）."""
+        agent = self.sm.get_current_agent()
+        context_info = ""
+        if agent and hasattr(agent, "get_context_usage"):
             try:
-                text = self.session.prompt()
-            except (EOFError, KeyboardInterrupt):
-                console.print()
-                console.print("[dim]Bye.[/dim]")
-                break
+                usage = agent.get_context_usage()
+                pct = usage.get("percentage", 0.0)
+                used = usage.get("used_tokens", 0)
+                limit = usage.get("limit_tokens", 0)
+                context_info = (
+                    f"context: {pct}% ({used / 1000:.1f}k/{limit / 1000:.1f}k)"
+                )
+            except Exception:
+                pass
 
-            user_input = text.strip()
-            if not user_input:
-                continue
+        left = f"{DEFAULT_LLM_PROVIDER}  {self._status_text}  {self.sm.work_dir}"
+        right = context_info
 
-            # 打印用户输入
-            self._print_user_input(user_input)
+        try:
+            width = self.app.output.get_size().columns
+        except Exception:
+            width = 80
+        padding_len = max(width - len(left) - len(right), 1)
 
-            # 处理命令
-            if user_input.startswith("/"):
-                self._handle_command(user_input)
-                continue
-
-            # 运行 Agent
-            self._run_agent(user_input)
+        return [
+            ("class:statusbar", left),
+            ("", " " * padding_len),
+            ("class:statusbar", right),
+        ]
 
     # ------------------------------------------------------------------ #
-    # 命令处理
+    # 交互逻辑
     # ------------------------------------------------------------------ #
+
+    def _on_accept(self, buffer: Buffer) -> bool:
+        """处理输入提交."""
+        text = buffer.text.strip()
+        if not text:
+            return True
+
+        buffer.text = ""
+
+        # 显示用户输入
+        self._add_history("user", text)
+
+        # 处理命令
+        if text.startswith("/"):
+            self._handle_command(text)
+            return True
+
+        # 运行 Agent
+        self._run_agent(text)
+        return True
+
+    def _add_history(self, role: str, text: str) -> None:
+        """添加历史消息并触发重绘."""
+        self._history_entries.append((role, text))
+        if len(self._history_entries) > 500:
+            self._history_entries = self._history_entries[-250:]
+        self.app.invalidate()
 
     def _handle_command(self, text: str) -> None:
         """处理内置命令."""
@@ -183,16 +284,16 @@ class AICodingApp:
         cmd = parts[0].lower()
 
         if cmd in ("/exit", "/quit"):
-            console.print("[dim]Bye.[/dim]")
-            raise SystemExit(0)
+            self.app.exit()
+            return
 
         if cmd == "/help":
-            self._print_system(self._help_text())
+            self._add_history("system", self._help_text())
             return
 
         if cmd == "/new":
             sid = self.sm.create()
-            self._print_system(f"New session: {sid}")
+            self._add_history("system", f"New session: {sid}")
             return
 
         if cmd == "/status":
@@ -205,16 +306,17 @@ class AICodingApp:
                 bar_len = 20
                 filled = int(bar_len * pct / 100)
                 bar = "█" * filled + "░" * (bar_len - filled)
-                self._print_system(
-                    f"Context: [{bar}] {pct}% ({used:,} / {limit:,} tokens)"
+                self._add_history(
+                    "system",
+                    f"Context: [{bar}] {pct}% ({used:,} / {limit:,} tokens)",
                 )
             else:
-                self._print_system("Status not available.")
+                self._add_history("system", "Status not available.")
             return
 
         if cmd == "/clear":
-            console.clear()
-            self._print_welcome()
+            self._history_entries.clear()
+            self.app.invalidate()
             return
 
         if cmd == "/session":
@@ -229,9 +331,9 @@ class AICodingApp:
                 lines = [f"Available tools ({len(tools)}):"]
                 for name in tools:
                     lines.append(f"  - {name}")
-                self._print_system("\n".join(lines))
+                self._add_history("system", "\n".join(lines))
             else:
-                self._print_error("No agent available.")
+                self._add_history("error", "No agent available.")
             return
 
         if cmd == "/history":
@@ -239,7 +341,7 @@ class AICodingApp:
             if agent:
                 history = agent.get_history()
                 if not history:
-                    self._print_system("History is empty.")
+                    self._add_history("system", "History is empty.")
                     return
                 lines = ["Conversation history:"]
                 for i, msg in enumerate(history, 1):
@@ -248,9 +350,9 @@ class AICodingApp:
                     if len(content) > 100:
                         content = content[:100] + "..."
                     lines.append(f"  {i}. [{role}] {content}")
-                self._print_system("\n".join(lines))
+                self._add_history("system", "\n".join(lines))
             else:
-                self._print_error("No agent available.")
+                self._add_history("error", "No agent available.")
             return
 
         if cmd == "/stream":
@@ -258,22 +360,24 @@ class AICodingApp:
             if agent:
                 agent.streaming = not agent.streaming
                 status = "on" if agent.streaming else "off"
-                self._print_system(f"Streaming mode {status}.")
+                self._add_history("system", f"Streaming mode {status}.")
             return
 
-        self._print_error(
-            f"Unknown command: {cmd}. Type /help for available commands."
+        self._add_history(
+            "error",
+            f"Unknown command: {cmd}. Type /help for available commands.",
         )
 
     def _handle_session_command(self, parts: List[str]) -> None:
         """处理 /session 子命令."""
         if len(parts) < 2:
-            self._print_system(
+            self._add_history(
+                "system",
                 "Usage:\n"
                 "  /session list\n"
                 "  /session switch <ID>\n"
                 "  /session rm <ID>\n"
-                "  /session rename <ID> <NAME>"
+                "  /session rename <ID> <NAME>",
             )
             return
 
@@ -281,7 +385,7 @@ class AICodingApp:
         if sub == "list":
             sessions = self.sm.list()
             if not sessions:
-                self._print_system("No sessions.")
+                self._add_history("system", "No sessions.")
                 return
             lines = [f"Sessions ({len(sessions)}):"]
             for s in sessions:
@@ -290,66 +394,65 @@ class AICodingApp:
                     f"  [{marker}] {s['session_id']}  {s['name']}  "
                     f"({s.get('message_count', 0)} msgs)"
                 )
-            self._print_system("\n".join(lines))
+            self._add_history("system", "\n".join(lines))
         elif sub == "switch":
             if len(parts) < 3:
-                self._print_system("Usage: /session switch <ID>")
+                self._add_history("system", "Usage: /session switch <ID>")
                 return
             sid = parts[2]
             if self.sm.switch(sid):
-                self._print_system(f"Switched to: {sid}")
+                self._add_history("system", f"Switched to: {sid}")
             else:
-                self._print_error(f"Session not found: {sid}")
+                self._add_history("error", f"Session not found: {sid}")
         elif sub in ("rm", "delete", "del"):
             if len(parts) < 3:
-                self._print_system("Usage: /session rm <ID>")
+                self._add_history("system", "Usage: /session rm <ID>")
                 return
             sid = parts[2]
             if self.sm.delete(sid):
-                self._print_system(f"Deleted session: {sid}")
+                self._add_history("system", f"Deleted session: {sid}")
             else:
-                self._print_error(f"Session not found: {sid}")
+                self._add_history("error", f"Session not found: {sid}")
         elif sub == "rename":
             if len(parts) < 4:
-                self._print_system("Usage: /session rename <ID> <NAME>")
+                self._add_history("system", "Usage: /session rename <ID> <NAME>")
                 return
             sid = parts[2]
             name = " ".join(parts[3:])
             if self.sm.rename(sid, name):
-                self._print_system(f"Renamed to: {name}")
+                self._add_history("system", f"Renamed to: {name}")
             else:
-                self._print_error(f"Session not found: {sid}")
+                self._add_history("error", f"Session not found: {sid}")
         else:
-            self._print_error(f"Unknown subcommand: {sub}")
-
-    # ------------------------------------------------------------------ #
-    # Agent 调用
-    # ------------------------------------------------------------------ #
+            self._add_history("error", f"Unknown subcommand: {sub}")
 
     def _run_agent(self, text: str) -> None:
-        """运行 Agent（阻塞当前线程）."""
+        """在后台线程中运行 Agent."""
         self._status_text = "Thinking..."
-        self.session.app.invalidate()  # 刷新 bottom_toolbar
+        self.app.invalidate()
 
-        agent = self.sm.get_current_agent()
-        if agent is None:
-            self._print_error("No active session.")
-            self._status_text = "Ready"
-            return
+        def target():
+            try:
+                agent = self.sm.get_current_agent()
+                if agent is None:
+                    self._add_history("error", "No active session.")
+                    return
 
-        try:
-            if self.verbose and hasattr(agent, "run_with_trace"):
-                self._run_agent_verbose(text)
-            elif agent.streaming:
-                self._run_agent_stream(text)
-            else:
-                result = agent.run(text)
-                self._print_assistant(result)
-        except Exception as e:
-            self._print_error(f"Agent error: {e}")
-        finally:
-            self._status_text = "Ready"
-            self.session.app.invalidate()  # 刷新 bottom_toolbar
+                if self.verbose and hasattr(agent, "run_with_trace"):
+                    self._run_agent_verbose(text)
+                elif agent.streaming:
+                    self._run_agent_stream(text)
+                else:
+                    result = agent.run(text)
+                    self._add_history("assistant", result)
+
+            except Exception as e:
+                self._add_history("error", f"Agent error: {e}")
+            finally:
+                self._status_text = "Ready"
+                self.app.invalidate()
+
+        threading.Thread(target=target, daemon=True).start()
 
     def _run_agent_verbose(self, text: str) -> None:
         """以 verbose 模式运行 Agent."""
@@ -357,34 +460,34 @@ class AICodingApp:
         for event in agent.run_with_trace(text):
             etype = event.get("type")
             if etype == "thinking":
-                self._print_thinking(event.get("text", ""))
+                self._add_history("thinking", event.get("text", ""))
             elif etype == "assistant":
-                self._print_assistant(event.get("text", ""))
+                self._add_history("assistant", event.get("text", ""))
             elif etype == "tool_call":
                 name = event.get("name", "")
                 args = event.get("args", {})
                 args_str = ", ".join(f"{k}={v!r}" for k, v in args.items())
-                self._print_tool(f"{name}({args_str})")
+                self._add_history("tool", f"{name}({args_str})")
             elif etype == "observation":
                 t = event.get("text", "")
                 if len(t) > 200:
                     t = t[:200] + f" ... ({len(t)} chars)"
-                self._print_system(t)
+                self._add_history("system", t)
             elif etype == "error":
-                self._print_error(event.get("text", ""))
+                self._add_history("error", event.get("text", ""))
 
     def _run_agent_stream(self, text: str) -> None:
         """以流式模式运行 Agent."""
         agent = self.sm.get_current_agent()
-        # 打印前缀
-        console.print("[#cdd6f4]● [/#cdd6f4]", end="")
-        try:
-            for chunk in agent.run_stream(text):
-                console.print(chunk, end="")
-            console.print()  # 最终换行
-        except Exception as e:
-            console.print()
-            self._print_error(f"Stream error: {e}")
+        chunks = []
+        for chunk in agent.run_stream(text):
+            chunks.append(chunk)
+            combined = "".join(chunks)
+            if self._history_entries and self._history_entries[-1][0] == "assistant":
+                self._history_entries[-1] = ("assistant", combined)
+            else:
+                self._history_entries.append(("assistant", combined))
+            self.app.invalidate()
 
     @staticmethod
     def _help_text() -> str:
@@ -400,11 +503,15 @@ class AICodingApp:
             "  /status            — Show context usage\n"
             "  /tools             — List available tools\n"
             "  /history           — Show conversation history\n"
-            "  /clear             — Clear screen\n"
+            "  /clear             — Clear history\n"
             "  /stream            — Toggle streaming mode\n"
             "  /exit              — Exit\n"
             "  (Any other text is sent to the Agent)"
         )
+
+    def run(self) -> None:
+        """启动应用."""
+        self.app.run()
 
 
 def run_tui(
@@ -425,7 +532,9 @@ def run_tui(
     )
 
     if session_id and not sm.switch(session_id):
-        console.print(f"[red]Session not found: {session_id}[/red]")
+        from rich.console import Console
+
+        Console().print(f"[red]Session not found: {session_id}[/red]")
         return
 
     app = AICodingApp(sm, verbose=verbose)
