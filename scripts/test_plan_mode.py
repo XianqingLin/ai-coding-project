@@ -6,7 +6,6 @@
     python scripts/test_plan_mode.py
 """
 
-import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -14,11 +13,10 @@ from unittest.mock import patch
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage
 
 from ai_coding.agent.nodes.tools_node import create_tools_node
-from ai_coding.agent.state import AgentState
-from ai_coding.mock_llm import mock_tool_call, mock_text
+from ai_coding.mock_llm import mock_text
 from ai_coding.tools import DEFAULT_TOOLS, ToolRegistry
 
 

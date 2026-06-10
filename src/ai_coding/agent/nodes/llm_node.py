@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Dict, List
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from ai_coding.agent.state import AgentState
-from ai_coding.sub_agent_manager import SubAgentManager
+from ai_coding.agent.sub_agent_manager import SubAgentManager
 from ai_coding.logger import get_logger
 
 if TYPE_CHECKING:

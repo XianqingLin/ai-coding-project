@@ -28,7 +28,6 @@ from ai_coding.llm import create_lc_llm
 from ai_coding.logger import setup_logging
 from ai_coding.mock_llm import MockChatModel, mock_tool_call, mock_text
 from ai_coding.tools import DEFAULT_TOOLS
-from eval_deepswe import load_instruction
 from agent_common import verify_test_task
 
 

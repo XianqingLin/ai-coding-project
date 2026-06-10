@@ -37,6 +37,9 @@ from ai_coding.tools.base import Tool, ToolRegistry
 
 logger = get_logger(__name__)
 
+# 默认上下文窗口上限 (tokens)
+DEFAULT_CONTEXT_LIMIT = 128000
+
 # 自动压缩触发阈值（相对于 token_budget 的比例）
 AUTO_COMPACT_THRESHOLD = 0.95
 
@@ -424,11 +427,11 @@ class LangGraphAgent:
         基于 self.state["messages"] 中的实际消息（已被管理）+ file_snapshots.
         """
         if tiktoken is None:
-            return {"used_tokens": 0, "limit_tokens": 128000, "percentage": 0.0}
+            return {"used_tokens": 0, "limit_tokens": DEFAULT_CONTEXT_LIMIT, "percentage": 0.0}
         try:
             encoder = tiktoken.get_encoding("cl100k_base")
         except Exception:
-            return {"used_tokens": 0, "limit_tokens": 128000, "percentage": 0.0}
+            return {"used_tokens": 0, "limit_tokens": DEFAULT_CONTEXT_LIMIT, "percentage": 0.0}
 
         total_tokens = 0
 
@@ -447,7 +450,7 @@ class LangGraphAgent:
             for path, content in self.state.get("file_snapshots", {}).items():
                 total_tokens += len(encoder.encode(content))
 
-        limit = 128000
+        limit = DEFAULT_CONTEXT_LIMIT
         percentage = round(total_tokens / limit * 100, 1)
         return {
             "used_tokens": total_tokens,

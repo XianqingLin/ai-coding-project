@@ -17,9 +17,8 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from ai_coding.agent.nodes.llm_node import create_llm_node
-from ai_coding.agent.state import AgentState
 from ai_coding.mock_llm import MockChatModel, mock_text
-from ai_coding.sub_agent_manager import SubAgentManager
+from ai_coding.agent.sub_agent_manager import SubAgentManager
 from ai_coding.tools.collaboration_tools import AskUserQuestionTool, AgentTool
 
 

@@ -5,7 +5,7 @@
 
 import os
 import sys
-from typing import Any, Dict, List
+from typing import Dict, List
 
 from langchain_core.messages import AIMessage, ToolMessage
 
@@ -13,7 +13,6 @@ from ai_coding.agent.state import AgentState
 from ai_coding.logger import get_logger
 from ai_coding.tools.base import ToolRegistry
 from ai_coding.tools.collaboration_tools import AskUserQuestionTool
-from ai_coding.tools.plan_tools import EnterPlanModeTool, ExitPlanModeTool
 from ai_coding.tools.shell_tools import ExecuteCommandTool
 from ai_coding.tools.todo_tool import TodoTool
 

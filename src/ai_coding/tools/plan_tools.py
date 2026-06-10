@@ -6,7 +6,7 @@ Plan 模式下 Write/Edit 只允许操作计划文件，TaskStop 被拦截。
 
 import os
 import time
-from typing import Any, Dict, List
+from typing import Any, List
 
 from ai_coding.tools.base import Tool, ToolParameter
 

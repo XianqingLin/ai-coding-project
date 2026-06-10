@@ -10,11 +10,21 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from ai_coding.logger import get_logger
 
+if TYPE_CHECKING:
+    from ai_coding.agent.core import LangGraphAgent
+    from ai_coding.tools.base import Tool
+
 logger = get_logger(__name__)
+
+# 子 Agent 同步模式超时（秒）
+SUB_AGENT_SYNC_TIMEOUT = 1800  # 30 分钟
+
+# 子 Agent 最大迭代次数
+SUB_AGENT_MAX_ITERATIONS = 10
 
 # 子 Agent 类型 → 可用工具名
 _SUB_AGENT_TOOL_SETS = {
@@ -115,7 +125,7 @@ class SubAgentManager:
             llm=sub_llm,
             tools=tools,
             system_prompt=system_prompt,
-            max_iterations=10,
+            max_iterations=SUB_AGENT_MAX_ITERATIONS,
             streaming=False,
             auto_approve=True,
             thread_id=sid,
@@ -153,12 +163,12 @@ class SubAgentManager:
             daemon=True,
         )
         thread.start()
-        thread.join(timeout=1800)
+        thread.join(timeout=SUB_AGENT_SYNC_TIMEOUT)
         if thread.is_alive():
             with self._lock:
                 self._agents[sid].status = "failed"
-                self._agents[sid].result = "[错误] 子 Agent 执行超时（30 分钟）"
-            logger.warning(f"[SubAgent] {sid} 执行超时（30 分钟）")
+                self._agents[sid].result = f"[错误] 子 Agent 执行超时（{SUB_AGENT_SYNC_TIMEOUT // 60} 分钟）"
+            logger.warning(f"[SubAgent] {sid} 执行超时（{SUB_AGENT_SYNC_TIMEOUT // 60} 分钟）")
 
         with self._lock:
             inst = self._agents[sid]
@@ -259,12 +269,12 @@ class SubAgentManager:
             daemon=True,
         )
         thread.start()
-        thread.join(timeout=1800)
+        thread.join(timeout=SUB_AGENT_SYNC_TIMEOUT)
         if thread.is_alive():
             with self._lock:
                 self._agents[instance_id].status = "failed"
-                self._agents[instance_id].result = "[错误] 子 Agent 执行超时（30 分钟）"
-            logger.warning(f"[SubAgent] {instance_id} 执行超时（30 分钟）")
+                self._agents[instance_id].result = f"[错误] 子 Agent 执行超时（{SUB_AGENT_SYNC_TIMEOUT // 60} 分钟）"
+            logger.warning(f"[SubAgent] {instance_id} 执行超时（{SUB_AGENT_SYNC_TIMEOUT // 60} 分钟）")
 
         return instance.result
 

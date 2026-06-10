@@ -5,7 +5,7 @@
 
 from typing import Any, Callable, List, Optional
 
-from ai_coding.sub_agent_manager import SubAgentManager
+from ai_coding.agent.sub_agent_manager import SubAgentManager
 from ai_coding.tools.base import Tool, ToolParameter
 
 
@@ -138,7 +138,7 @@ class AgentTool(Tool):
         super().__init__()
         self._llm: Any = None
         self._llm_factory: Optional[Callable[[], Any]] = None
-        from ai_coding.sub_agent_manager import SubAgentManager
+        from ai_coding.agent.sub_agent_manager import SubAgentManager
         self._manager = SubAgentManager()
 
     def set_llm(self, llm: Any, llm_factory: Optional[Callable[[], Any]] = None) -> None:

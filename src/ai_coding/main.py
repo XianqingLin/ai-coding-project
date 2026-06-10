@@ -11,6 +11,7 @@ from pathlib import Path
 from ai_coding.config import DEFAULT_LLM_PROVIDER
 from ai_coding.llm import create_lc_llm
 from ai_coding.agent import SessionManager
+from ai_coding.agent.core import DEFAULT_CONTEXT_LIMIT
 from ai_coding.logger import setup_logging, get_logger
 from ai_coding.tools import DEFAULT_TOOLS
 
@@ -246,7 +247,7 @@ def _handle_command(
             return "Status not available."
         usage = agent.get_context_usage()
         used = usage.get("used_tokens", 0)
-        limit = usage.get("limit_tokens", 128000)
+        limit = usage.get("limit_tokens", DEFAULT_CONTEXT_LIMIT)
         pct = usage.get("percentage", 0.0)
         bar_len = 20
         filled = int(bar_len * pct / 100)
