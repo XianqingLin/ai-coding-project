@@ -29,7 +29,7 @@ from ai_coding.agent.core import DEFAULT_CONTEXT_LIMIT
 from ai_coding.config import DEFAULT_LLM_PROVIDER
 from ai_coding.llm import create_lc_llm
 from ai_coding.logger import setup_logging
-from ai_coding.tui.render import render_markdown
+from tui.render import render_markdown
 from ai_coding.tools import DEFAULT_TOOLS
 
 

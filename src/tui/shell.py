@@ -20,7 +20,7 @@ from prompt_toolkit.shortcuts import confirm
 from ai_coding.agent import SessionManager
 from ai_coding.agent.core import DEFAULT_CONTEXT_LIMIT
 from ai_coding.config import DEFAULT_LLM_PROVIDER
-from ai_coding.tui.render import (
+from tui.render import (
     console,
     print_help,
     print_message,

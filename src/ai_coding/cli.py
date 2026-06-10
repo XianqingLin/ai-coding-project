@@ -96,7 +96,7 @@ def chat(
         code = start_chat_session(work_dir, auto_approve=auto_approve, verbose=verbose)
         raise typer.Exit(code)
 
-    from ai_coding.tui import run_tui
+    from tui import run_tui
     run_tui(work_dir=work_dir, auto_approve=auto_approve, verbose=verbose)
 
 
