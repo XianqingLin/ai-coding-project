@@ -378,6 +378,7 @@ def main() -> int:
         llm_factory=lambda: create_lc_llm(provider),
         tools=DEFAULT_TOOLS,
         auto_approve=auto_approve,
+        work_dir=str(project_root),
     )
 
     current = sm.current

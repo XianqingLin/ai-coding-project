@@ -8,7 +8,7 @@
 
 import time
 import uuid
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional
 
 try:
     import tiktoken
@@ -67,6 +67,7 @@ class LangGraphAgent:
         short_term_memory_budget: int = 100000,
         auto_approve: bool = False,
         llm_factory=None,
+        on_state_change: Optional[Callable[[], None]] = None,
     ) -> None:
         self.llm = llm
         self.llm_factory = llm_factory
@@ -78,6 +79,7 @@ class LangGraphAgent:
         self.system_prompt = system_prompt or self._build_system_prompt()
         self.thread_id = thread_id or uuid.uuid4().hex[:8]
         self.auto_approve = auto_approve
+        self.on_state_change = on_state_change
 
         # 唯一状态源：自我管理容量的短期记忆容器
         self.state: Optional[AgentState] = None
@@ -223,6 +225,11 @@ class LangGraphAgent:
             )
             # 保存最终 state（跨轮次保留）
             self.state = result
+            if self.on_state_change:
+                try:
+                    self.on_state_change()
+                except Exception:
+                    pass
 
             messages = list(result.get("messages", []))
             if not messages:
@@ -361,6 +368,11 @@ class LangGraphAgent:
 
         # 同步到 self.state
         self.state = current_state
+        if self.on_state_change:
+            try:
+                self.on_state_change()
+            except Exception:
+                pass
 
     def get_history(self) -> List[Dict[str, Any]]:
         """获取当前会话的完整对话历史."""
