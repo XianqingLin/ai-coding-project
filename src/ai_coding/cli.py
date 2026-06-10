@@ -85,14 +85,19 @@ def chat(
     work_dir: str = typer.Option(".", "--work-dir", "-w", help="项目工作目录"),
     auto_approve: bool = typer.Option(False, "--auto-approve", "-a", help="自动批准工具调用"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="显示详细输出"),
+    no_tui: bool = typer.Option(False, "--no-tui", help="使用旧版文本 REPL"),
 ):
     """启动交互式聊天会话."""
     setup_logging()
     work_dir = _resolve_work_dir(work_dir)
 
-    from ai_coding.main import start_chat_session
-    code = start_chat_session(work_dir, auto_approve=auto_approve, verbose=verbose)
-    raise typer.Exit(code)
+    if no_tui:
+        from ai_coding.main import start_chat_session
+        code = start_chat_session(work_dir, auto_approve=auto_approve, verbose=verbose)
+        raise typer.Exit(code)
+
+    from ai_coding.tui import run_tui
+    run_tui(work_dir=work_dir, auto_approve=auto_approve)
 
 
 @session_app.command("list")
