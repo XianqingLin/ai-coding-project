@@ -150,7 +150,7 @@ class AICodingApp:
         self.app = Application(
             layout=layout,
             key_bindings=kb,
-            full_screen=True,
+            full_screen=False,
             style=self._get_style(),
             mouse_support=True,
         )
