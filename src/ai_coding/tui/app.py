@@ -164,9 +164,9 @@ class AICodingApp:
             """Enter 提交."""
             event.current_buffer.validate_and_handle()
 
-        @kb.add("c-enter")
+        @kb.add("c-j")
         def _(event):
-            """Ctrl+Enter 换行."""
+            """Ctrl+J 插入换行."""
             event.current_buffer.insert_text("\n")
 
         return kb
