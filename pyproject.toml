@@ -32,6 +32,7 @@ dependencies = [
     "langchain-openai>=1.0",
     "typer>=0.12",
     "prompt-toolkit>=3.0",
+    "textual>=0.50",
     "tomli>=2.0;python_version<'3.11'",
 ]
 

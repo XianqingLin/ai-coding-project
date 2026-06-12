@@ -6,7 +6,6 @@
 - ShortTermMemory 作为 AgentState 的容量管理工具，由 LangGraphAgent 显式调用
 """
 
-import time
 import uuid
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
@@ -22,7 +21,8 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
-from langgraph.graph import END, START, StateGraph, add_messages
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, StateGraph
 
 from ai_coding.agent.nodes import (
     create_approval_gate,
@@ -50,7 +50,7 @@ class LangGraphAgent:
     职责边界：
     - 组装 LLM、工具、上下文管理器等依赖
     - 构建并编译 StateGraph
-    - 对外暴露运行接口（run / run_stream / run_with_trace / compact）
+    - 对外暴露运行接口（run / run_stream / run_stream_verbose / compact）
     - 通过 self.state 跨轮次管理对话历史和文件快照
     - 管理 AgentState 的容量（显式/自动压缩）
     """
@@ -136,12 +136,13 @@ class LangGraphAgent:
         builder.add_edge("approval", "tools")
         builder.add_edge("tools", "llm")
 
-        return builder.compile()
+        return builder.compile(checkpointer=MemorySaver())
 
     def _get_run_config(self) -> dict:
         """构建运行配置（recursion_limit 用于防止无限循环）."""
         return {
             "recursion_limit": self.max_iterations * 5 + 20,
+            "configurable": {"thread_id": self.thread_id},
         }
 
     def _build_state(self, user_input: str) -> dict:
@@ -246,17 +247,18 @@ class LangGraphAgent:
     def run_stream(self, user_input: str) -> Iterator[str]:
         """处理用户输入（流式输出）.
 
-        注意：流式模式下无法获取完整的最终 state（特别是 file_snapshots 的更新），
-        因此 run_stream 不会更新 self.state。如果需要状态累积，请使用 run().
+        流式输出结束后会通过 graph.get_state 获取最终状态并更新 self.state，
+        从而支持跨轮次的历史累积和持久化.
         """
         logger.info(f"[流式] 用户输入: {user_input[:100]}")
+        config = self._get_run_config()
         try:
             # 入口检查：必要时自动压缩
             self._maybe_compact()
 
             for event in self.graph.stream(
                 self._build_state(user_input),
-                config=self._get_run_config(),
+                config=config,
                 stream_mode="messages",
             ):
                 msg, metadata = event
@@ -264,115 +266,131 @@ class LangGraphAgent:
                     content = msg.content if hasattr(msg, "content") else ""
                     if content:
                         yield content
+
+            # 流式结束后获取最终状态并持久化
+            try:
+                final_snapshot = self.graph.get_state(config)
+                if final_snapshot is not None and hasattr(final_snapshot, "values"):
+                    self.state = final_snapshot.values
+                elif isinstance(final_snapshot, dict):
+                    self.state = final_snapshot
+                if self.on_state_change:
+                    try:
+                        self.on_state_change()
+                    except Exception:
+                        pass
+                logger.info("[流式] 最终状态已保存")
+            except Exception as e:
+                logger.warning(f"[流式] 获取最终状态失败: {e}")
         except Exception as e:
             logger.error(f"[流式] Agent 执行失败: {e}", exc_info=True)
             yield f"[错误] Agent 执行失败: {e}"
             return
 
-    def run_with_trace(self, user_input: str) -> Iterator[Dict[str, Any]]:
-        """处理用户输入，返回完整的工作流程轨迹（用于 verbose 显示）."""
-        logger.info(f"[轨迹] 用户输入: {user_input[:100]}")
-        start_time = time.time()
-        step = 0
+    def run_stream_verbose(self, user_input: str) -> Iterator[Dict[str, Any]]:
+        """流式+verbose 模式.
 
-        # 入口检查：必要时自动压缩
-        self._maybe_compact()
+        同时输出：
+        - thinking（reasoning_content）流式显示
+        - assistant（content）流式显示
+        - tool_call 一次性显示
+        - observation 一次性显示
 
-        initial = self._build_state(user_input)
-        # 手动维护当前 state，用于在 stream 结束后同步到 self.state
-        current_state: Dict[str, Any] = {
-            "messages": list(initial.get("messages", [])),
-            "file_snapshots": dict(initial.get("file_snapshots", {})),
-            "todos": list(initial.get("todos", [])),
-            "globally_approved_tools": list(initial.get("globally_approved_tools", [])),
-            "background_tasks": list(initial.get("background_tasks", [])),
-            "plan_mode": bool(initial.get("plan_mode", False)),
-            "plan_file_path": str(initial.get("plan_file_path", "")),
-            "sub_agents": list(initial.get("sub_agents", [])),
-        }
+        使用 stream_mode=["messages", "updates"] 同时监听流式消息和节点更新.
+        """
+        logger.info(f"[流式+verbose] 用户输入: {user_input[:100]}")
+        config = self._get_run_config()
+        current_phase: Optional[str] = None  # None, "thinking", "assistant"
 
         try:
-            for chunk in self.graph.stream(
-                initial,
-                config=self._get_run_config(),
-                stream_mode="updates",
+            self._maybe_compact()
+
+            for event in self.graph.stream(
+                self._build_state(user_input),
+                config=config,
+                stream_mode=["messages", "updates"],
             ):
-                for node, update in chunk.items():
-                    ts = round(time.time() - start_time, 2)
-                    if node == "llm":
-                        msg = update["messages"][0]
-                        if isinstance(msg, AIMessage):
-                            step += 1
-                            if msg.tool_calls:
-                                thinking_text = msg.additional_kwargs.get("reasoning_content") or msg.content
-                                if thinking_text:
-                                    event = {"type": "thinking", "text": thinking_text, "timestamp": ts, "step": step}
-                                    logger.info(f"[轨迹] step={step} thinking_len={len(thinking_text)}")
-                                    yield event
-                                for tc in msg.tool_calls:
-                                    event = {
-                                        "type": "tool_call",
-                                        "name": tc.get("name", ""),
-                                        "args": tc.get("args", {}),
-                                        "id": tc.get("id", ""),
-                                        "timestamp": ts,
-                                        "step": step,
-                                    }
-                                    logger.info(f"[轨迹] step={step} tool_call={tc.get('name', '')} args={tc.get('args', {})}")
-                                    yield event
-                            else:
-                                if msg.content:
-                                    event = {"type": "assistant", "text": msg.content, "timestamp": ts, "step": step}
-                                    logger.info(f"[轨迹] step={step} assistant_len={len(msg.content)}")
-                                    yield event
-                    elif node == "tools":
-                        msg = update["messages"][0]
-                        if isinstance(msg, ToolMessage):
-                            text = msg.content or ""
-                            event = {
-                                "type": "observation",
-                                "text": text,
-                                "tool_call_id": msg.tool_call_id,
-                                "timestamp": ts,
-                                "step": step,
-                            }
-                            logger.info(f"[轨迹] step={step} observation_len={len(text)} tool_call_id={msg.tool_call_id}")
-                            yield event
+                mode, data = event
 
-                    # 合并当前 update 到 current_state
-                    if "messages" in update:
-                        current_state["messages"] = list(
-                            add_messages(current_state["messages"], update["messages"])
-                        )
-                    if "file_snapshots" in update:
-                        current_state["file_snapshots"].update(update["file_snapshots"])
-                    if "todos" in update:
-                        current_state["todos"] = list(update["todos"])
-                    if "globally_approved_tools" in update:
-                        current_state["globally_approved_tools"] = list(update["globally_approved_tools"])
-                    if "background_tasks" in update:
-                        current_state["background_tasks"] = list(update["background_tasks"])
-                    if "plan_mode" in update:
-                        current_state["plan_mode"] = bool(update["plan_mode"])
-                    if "plan_file_path" in update:
-                        current_state["plan_file_path"] = str(update["plan_file_path"])
-                    if "sub_agents" in update:
-                        current_state["sub_agents"] = list(update["sub_agents"])
+                if mode == "messages":
+                    msg, metadata = data
+                    node = metadata.get("langgraph_node") if metadata else None
+                    if node != "llm":
+                        continue
 
-            elapsed = time.time() - start_time
-            logger.info(f"[轨迹] Agent 完成 | 总耗时={elapsed:.1f}s | 步骤={step}")
-        except Exception as e:
-            logger.error(f"[轨迹] Agent 执行失败: {e}", exc_info=True)
-            yield {"type": "error", "text": str(e), "timestamp": round(time.time() - start_time, 2), "step": step}
-            return
+                    reasoning = ""
+                    content = ""
 
-        # 同步到 self.state
-        self.state = current_state
-        if self.on_state_change:
+                    if hasattr(msg, "additional_kwargs") and msg.additional_kwargs:
+                        reasoning = msg.additional_kwargs.get("reasoning_content") or ""
+
+                    if hasattr(msg, "content") and msg.content:
+                        content = msg.content
+
+                    # thinking chunk
+                    if reasoning:
+                        if current_phase != "thinking":
+                            if current_phase == "assistant":
+                                yield {"type": "assistant_end"}
+                            current_phase = "thinking"
+                            yield {"type": "thinking_start"}
+                        yield {"type": "thinking_chunk", "text": reasoning}
+
+                    # assistant chunk
+                    if content:
+                        if current_phase == "thinking":
+                            yield {"type": "thinking_end"}
+                            current_phase = "assistant"
+                            yield {"type": "assistant_start"}
+                        elif current_phase != "assistant":
+                            current_phase = "assistant"
+                            yield {"type": "assistant_start"}
+                        yield {"type": "assistant_chunk", "text": content}
+
+                elif mode == "updates":
+                    for node_name, update in data.items():
+                        if node_name == "llm":
+                            messages = update.get("messages", [])
+                            for msg in messages:
+                                if isinstance(msg, AIMessage) and msg.tool_calls:
+                                    for tc in msg.tool_calls:
+                                        yield {
+                                            "type": "tool_call",
+                                            "name": tc.get("name", ""),
+                                            "args": tc.get("args", {}),
+                                        }
+                        elif node_name == "tools":
+                            messages = update.get("messages", [])
+                            for msg in messages:
+                                if isinstance(msg, ToolMessage):
+                                    text = msg.content or ""
+                                    yield {"type": "observation", "text": text}
+
+            # 结束当前阶段
+            if current_phase == "thinking":
+                yield {"type": "thinking_end"}
+            elif current_phase == "assistant":
+                yield {"type": "assistant_end"}
+
+            # 保存最终状态
             try:
-                self.on_state_change()
-            except Exception:
-                pass
+                final_snapshot = self.graph.get_state(config)
+                if final_snapshot is not None and hasattr(final_snapshot, "values"):
+                    self.state = final_snapshot.values
+                elif isinstance(final_snapshot, dict):
+                    self.state = final_snapshot
+                if self.on_state_change:
+                    try:
+                        self.on_state_change()
+                    except Exception:
+                        pass
+                logger.info("[流式+verbose] 最终状态已保存")
+            except Exception as e:
+                logger.warning(f"[流式+verbose] 获取最终状态失败: {e}")
+
+        except Exception as e:
+            logger.error(f"[流式+verbose] Agent 执行失败: {e}", exc_info=True)
+            yield {"type": "error", "text": f"Agent error: {e}"}
 
     def get_history(self) -> List[Dict[str, Any]]:
         """获取当前会话的完整对话历史."""

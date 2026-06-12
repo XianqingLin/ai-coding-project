@@ -235,6 +235,9 @@ class SessionManager:
     def delete(self, session_id: str) -> bool:
         """删除会话.
 
+        如果删除的是最后一个会话，会自动创建一个默认会话以保证
+        始终存在可用的当前会话.
+
         Args:
             session_id: 要删除的会话 ID.
 
@@ -245,12 +248,17 @@ class SessionManager:
         if session_id not in self.sessions:
             return False
         name = self.sessions[session_id].name
+        was_current = self.current_session_id == session_id
         del self.sessions[session_id]
         self.storage.delete_session(self.work_dir, session_id)
-        if self.current_session_id == session_id:
+        if was_current:
             self.current_session_id = next(iter(self.sessions.keys()), None)
             if self.current_session_id:
                 self._mark_current_in_index(self.current_session_id)
+        # 删除后如果没有剩余会话，自动创建默认会话
+        if not self.sessions:
+            self.create(name="default")
+            logger.info("所有会话已删除，自动创建默认会话")
         logger.info(f"删除会话: {name} ({session_id})")
         return True
 

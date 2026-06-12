@@ -15,7 +15,7 @@ from ai_coding.llm import create_lc_llm
 from ai_coding.agent import SessionManager
 from ai_coding.logger import setup_logging, get_logger
 from ai_coding.tools import DEFAULT_TOOLS
-from ai_coding.main import _print_welcome, _run_repl
+
 
 logger = get_logger(__name__)
 
@@ -54,7 +54,6 @@ def ask(
     work_dir: str = typer.Option(".", "--work-dir", "-w", help="项目工作目录"),
     auto_approve: bool = typer.Option(False, "--auto-approve", "-a", help="自动批准工具调用"),
     session: Optional[str] = typer.Option(None, "--session", "-s", help="指定会话 ID"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="显示详细输出"),
 ):
     """向 Agent 发送一次性指令并打印回复."""
     setup_logging()
@@ -71,11 +70,6 @@ def ask(
         typer.echo("[错误] 当前没有活跃的会话", err=True)
         raise typer.Exit(1)
 
-    if verbose:
-        typer.echo(f"Work dir: {work_dir}")
-        typer.echo(f"Session: {sm.current.name if sm.current else 'none'}")
-        typer.echo("---")
-
     result = agent.run(prompt)
     typer.echo(result)
 
@@ -84,20 +78,13 @@ def ask(
 def chat(
     work_dir: str = typer.Option(".", "--work-dir", "-w", help="项目工作目录"),
     auto_approve: bool = typer.Option(False, "--auto-approve", "-a", help="自动批准工具调用"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="显示详细输出"),
-    no_tui: bool = typer.Option(False, "--no-tui", help="使用旧版文本 REPL"),
 ):
-    """启动交互式聊天会话."""
+    """启动交互式聊天会话（固定为流式+verbose 模式）."""
     setup_logging()
     work_dir = _resolve_work_dir(work_dir)
 
-    if no_tui:
-        from ai_coding.main import start_chat_session
-        code = start_chat_session(work_dir, auto_approve=auto_approve, verbose=verbose)
-        raise typer.Exit(code)
-
     from ai_coding.tui import run_tui
-    run_tui(work_dir=work_dir, auto_approve=auto_approve, verbose=verbose)
+    run_tui(work_dir=work_dir, auto_approve=auto_approve)
 
 
 @session_app.command("list")
@@ -161,7 +148,17 @@ def session_delete(
 
 
 def main() -> None:
-    """CLI 入口."""
+    """CLI 入口.
+
+    无参数时默认执行 chat 命令.
+    """
+    import sys
+
+    if len(sys.argv) == 1:
+        sys.argv.append("chat")
+    elif len(sys.argv) > 1 and sys.argv[1].startswith("-") and sys.argv[1] not in ("--help", "-h", "--version"):
+        sys.argv.insert(1, "chat")
+
     app()
 
 
