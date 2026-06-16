@@ -8,7 +8,11 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from langchain_core.tools import BaseTool
 
 
 @dataclass
@@ -56,6 +60,16 @@ class Tool(ABC):
     name: str = ""
     description: str = ""
     requires_approval: bool = False
+    work_dir: str = ""
+
+    def set_work_dir(self, work_dir: str) -> None:
+        """设置工具允许操作的工作目录根路径."""
+        self.work_dir = work_dir or ""
+
+    def _resolve_path(self, path: str, must_exist: bool = False) -> "Path":
+        """解析并校验路径位于工作目录沙箱内."""
+        from ai_coding.tools.sandbox import resolve_sandboxed_path
+        return resolve_sandboxed_path(path, self.work_dir, must_exist=must_exist)
     
     @property
     @abstractmethod
@@ -208,16 +222,6 @@ class ToolRegistry:
             raise ValueError(f"工具 '{tool.name}' 已注册")
         self._tools[tool.name] = tool
     
-    def register_all(self, tools: List[Tool]) -> None:
-        """批量注册工具.
-        
-        Args:
-            tools: 工具实例列表.
-            
-        """
-        for tool in tools:
-            self.register(tool)
-    
     def get(self, name: str) -> Tool:
         """根据名称获取工具.
         
@@ -258,16 +262,6 @@ class ToolRegistry:
             
         """
         return [tool.get_schema() for tool in self._tools.values()]
-    
-    def to_langchain_tools(self) -> List[BaseTool]:
-        """转换为 LangChain 工具列表.
-        
-        Returns:
-            LangChain 格式的工具列表.
-            
-        """
-        from langchain_core.tools import BaseTool
-        return [tool.to_langchain_tool() for tool in self._tools.values()]
     
     def list_tools(self) -> List[str]:
         """列出所有已注册的工具名称.

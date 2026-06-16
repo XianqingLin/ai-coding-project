@@ -4,8 +4,8 @@
 Plan 模式下 Write/Edit 只允许操作计划文件，TaskStop 被拦截。
 """
 
-import os
 import time
+from pathlib import Path
 from typing import Any, List
 
 from ai_coding.tools.base import Tool, ToolParameter
@@ -31,12 +31,12 @@ class EnterPlanModeTool(Tool):
         return []
 
     def execute(self) -> str:
-        plan_dir = ".kimi/plans"
-        os.makedirs(plan_dir, exist_ok=True)
+        plan_dir = Path(self.work_dir) / ".kimi" / "plans"
+        plan_dir.mkdir(parents=True, exist_ok=True)
         ts = int(time.time())
-        plan_path = os.path.join(plan_dir, f"plan_{ts}.md")
+        plan_path = plan_dir / f"plan_{ts}.md"
 
-        with open(plan_path, "w", encoding="utf-8") as f:
+        with plan_path.open("w", encoding="utf-8") as f:
             f.write("# Plan\n\n")
 
         return (

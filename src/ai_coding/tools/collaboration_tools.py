@@ -3,9 +3,8 @@
 提供 AskUserQuestion（向用户提问）和 Agent（委派子 Agent）两个工具.
 """
 
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
-from ai_coding.agent.sub_agent_manager import SubAgentManager
 from ai_coding.tools.base import Tool, ToolParameter
 
 
@@ -138,6 +137,10 @@ class AgentTool(Tool):
         super().__init__()
         self._llm: Any = None
         self._llm_factory: Optional[Callable[[], Any]] = None
+        self._event_loop: Any = None
+        self._on_approval_request: Optional[Callable[[Dict[str, Any]], None]] = None
+        self._on_edit_proposal: Optional[Callable[[Dict[str, Any]], None]] = None
+        self._parent_work_dir: str = ""
         from ai_coding.agent.sub_agent_manager import SubAgentManager
         self._manager = SubAgentManager()
 
@@ -145,6 +148,20 @@ class AgentTool(Tool):
         """由 LangGraphAgent 注入 LLM 依赖."""
         self._llm = llm
         self._llm_factory = llm_factory
+
+    def set_parent_context(
+        self,
+        event_loop: Any = None,
+        on_approval_request: Optional[Callable[[Dict[str, Any]], None]] = None,
+        on_edit_proposal: Optional[Callable[[Dict[str, Any]], None]] = None,
+        work_dir: Optional[str] = None,
+    ) -> None:
+        """继承父 Agent 的回调上下文与工作目录."""
+        self._event_loop = event_loop
+        self._on_approval_request = on_approval_request
+        self._on_edit_proposal = on_edit_proposal
+        if work_dir:
+            self._parent_work_dir = work_dir
 
     @property
     def parameters(self) -> List[ToolParameter]:
@@ -205,4 +222,8 @@ class AgentTool(Tool):
             llm_factory=self._llm_factory,
             run_in_background=run_in_background,
             instance_id=instance_id,
+            event_loop=self._event_loop,
+            on_approval_request=self._on_approval_request,
+            on_edit_proposal=self._on_edit_proposal,
+            work_dir=self._parent_work_dir or self.work_dir,
         )

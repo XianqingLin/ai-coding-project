@@ -3,8 +3,6 @@
 使用 Typer 提供命令行接口，支持一次性问答、交互式聊天和会话管理.
 """
 
-import os
-import sys
 from pathlib import Path
 from typing import Optional
 
@@ -14,7 +12,7 @@ from ai_coding.config import DEFAULT_LLM_PROVIDER
 from ai_coding.llm import create_lc_llm
 from ai_coding.agent import SessionManager
 from ai_coding.logger import setup_logging, get_logger
-from ai_coding.tools import DEFAULT_TOOLS
+from ai_coding.tools import create_default_tools
 
 
 logger = get_logger(__name__)
@@ -39,10 +37,9 @@ def _resolve_work_dir(work_dir: str) -> str:
 def _create_sm(work_dir: str, auto_approve: bool = False) -> SessionManager:
     """创建 SessionManager 实例."""
     provider = DEFAULT_LLM_PROVIDER
-    os.chdir(work_dir)
     return SessionManager(
         llm_factory=lambda: create_lc_llm(provider),
-        tools=DEFAULT_TOOLS,
+        tools_factory=create_default_tools,
         auto_approve=auto_approve,
         work_dir=work_dir,
     )

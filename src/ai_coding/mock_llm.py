@@ -163,7 +163,7 @@ class MockChatModel:
                 try:
                     args = json.loads(parts[1])
                 except json.JSONDecodeError:
-                    print(f"[MockLLM] 警告: 无法解析 JSON 参数，使用空参数")
+                    print("[MockLLM] 警告: 无法解析 JSON 参数，使用空参数")
             return mock_tool_call(tool_name, args)
 
         # 默认当作纯文本

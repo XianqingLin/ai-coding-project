@@ -301,9 +301,9 @@ class AICodingApp(App):
                 cmd = cmd[:40] + "..."
             return f"● {name}  {cmd}"
 
-        # SetTodoList：固定描述
-        if name == "SetTodoList":
-            return "● SetTodoList  Update Todos"
+        # set_todo：固定描述
+        if name == "set_todo":
+            return "● set_todo  Update Todos"
 
         # 通用处理：取第一个参数值
         first_val = str(next(iter(args.values())))

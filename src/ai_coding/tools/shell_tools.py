@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from ai_coding.tools.base import Tool, ToolParameter
+from ai_coding.tools.sandbox import resolve_sandboxed_cwd, SandboxViolationError
 
 
 class ExecuteCommandTool(Tool):
@@ -91,10 +92,17 @@ class ExecuteCommandTool(Tool):
         timeout_sec = timeout_ms / 1000.0 if timeout_ms > 0 else None
 
         try:
+            effective_cwd = resolve_sandboxed_cwd(cwd, self.work_dir)
+        except SandboxViolationError as e:
+            return f"[错误] {e}"
+        except Exception as e:
+            return f"[错误] 解析工作目录失败: {e}"
+
+        try:
             proc = subprocess.Popen(
                 command,
                 shell=True,
-                cwd=cwd or None,
+                cwd=str(effective_cwd),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -137,6 +145,13 @@ class ExecuteCommandTool(Tool):
         if not description:
             return "[错误] run_in_background=true 时必须提供 description 参数."
 
+        try:
+            effective_cwd = resolve_sandboxed_cwd(cwd, self.work_dir)
+        except SandboxViolationError as e:
+            return f"[错误] {e}"
+        except Exception as e:
+            return f"[错误] 解析工作目录失败: {e}"
+
         task_id = uuid.uuid4().hex[:8]
         output_path = Path(tempfile.gettempdir()) / f"ai-coding-bg-{task_id}.log"
 
@@ -145,7 +160,7 @@ class ExecuteCommandTool(Tool):
             proc = subprocess.Popen(
                 command,
                 shell=True,
-                cwd=cwd or None,
+                cwd=str(effective_cwd),
                 stdout=f,
                 stderr=subprocess.STDOUT,
                 text=True,

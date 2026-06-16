@@ -6,7 +6,10 @@
 - ShortTermMemory 作为 AgentState 的容量管理工具，由 LangGraphAgent 显式调用
 """
 
+import os
+import time
 import uuid
+from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
 try:
@@ -66,8 +69,13 @@ class LangGraphAgent:
         enable_short_term_memory: bool = True,
         short_term_memory_budget: int = 100000,
         auto_approve: bool = False,
+        work_dir: Optional[str] = None,
         llm_factory=None,
         on_state_change: Optional[Callable[[], None]] = None,
+        on_wire_event: Optional[Callable[[Dict[str, Any]], None]] = None,
+        event_loop: Any = None,
+        on_approval_request: Optional[Callable[[Dict[str, Any]], None]] = None,
+        on_edit_proposal: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> None:
         self.llm = llm
         self.llm_factory = llm_factory
@@ -79,7 +87,24 @@ class LangGraphAgent:
         self.system_prompt = system_prompt or self._build_system_prompt()
         self.thread_id = thread_id or uuid.uuid4().hex[:8]
         self.auto_approve = auto_approve
+        self.work_dir = work_dir or str(Path.cwd())
         self.on_state_change = on_state_change
+        self.on_wire_event = on_wire_event
+        self.event_loop = event_loop
+        self.on_approval_request = on_approval_request
+        self.on_edit_proposal = on_edit_proposal
+
+        # 流式输出时缓存 assistant 文本，用于 wire 记录
+        self._pending_assistant_text: str = ""
+
+        # 前端 approval 等待机制：按 request_id 索引多个 pending future
+        self._approval_futures: Dict[str, Any] = {}
+
+        # 流式运行取消标志
+        self._stop_requested = False
+
+        # 待处理的 edit_proposal（前端可 apply 或 reject）
+        self._pending_edits: Dict[str, Dict[str, Any]] = {}
 
         # 唯一状态源：自我管理容量的短期记忆容器
         self.state: Optional[AgentState] = None
@@ -90,6 +115,17 @@ class LangGraphAgent:
             # 向子 Agent 派发工具注入 LLM 依赖
             if hasattr(tool, "set_llm") and callable(getattr(tool, "set_llm")):
                 tool.set_llm(self.llm, self.llm_factory)
+            # 注入工作目录沙箱
+            if hasattr(tool, "set_work_dir") and callable(getattr(tool, "set_work_dir")):
+                tool.set_work_dir(self.work_dir)
+            # 子 Agent 工具继承父 Agent 的回调上下文
+            if hasattr(tool, "set_parent_context") and callable(getattr(tool, "set_parent_context")):
+                tool.set_parent_context(
+                    event_loop=self.event_loop,
+                    on_approval_request=self.on_approval_request,
+                    on_edit_proposal=self.on_edit_proposal,
+                    work_dir=self.work_dir,
+                )
             self.tool_registry.register(tool)
 
         # 容量管理工具：用于 compact 和 _maybe_compact
@@ -117,10 +153,15 @@ class LangGraphAgent:
         builder.add_node("approval", create_approval_gate(
             tool_registry=self.tool_registry,
             interactive=not self.auto_approve,
+            on_approval_request=self.on_approval_request,
+            register_approval_future=self.register_approval_future,
         ))
         builder.add_node(
             "tools",
-            create_tools_node(tool_registry=self.tool_registry),
+            create_tools_node(
+                tool_registry=self.tool_registry,
+                on_edit_proposal=self._handle_edit_proposal,
+            ),
         )
 
         # 图拓扑：START -> LLM -> (条件) -> approval -> 工具 -> 回到 LLM
@@ -212,9 +253,96 @@ class LangGraphAgent:
             )
             self.compact()
 
+    def _handle_edit_proposal(self, proposal: Dict[str, Any]) -> None:
+        """内部处理 edit_proposal：缓存并透传给外部回调."""
+        edit_id = proposal.get("id", "")
+        if edit_id:
+            self._pending_edits[edit_id] = proposal
+        if self.on_edit_proposal is not None:
+            try:
+                self.on_edit_proposal(proposal)
+            except Exception:
+                logger.debug("edit_proposal 外部回调失败", exc_info=True)
+
+    def apply_edit(self, edit_id: str) -> bool:
+        """确认应用 edit_proposal.
+
+        当前实现中文件已被工具写入，apply 仅表示用户确认保留。
+        """
+        if edit_id not in self._pending_edits:
+            return False
+        del self._pending_edits[edit_id]
+        return True
+
+    def reject_edit(self, edit_id: str) -> bool:
+        """拒绝 edit_proposal，将文件恢复为旧内容.
+
+        若旧内容为空且文件原本不存在，则删除文件。
+        """
+        if edit_id not in self._pending_edits:
+            return False
+        proposal = self._pending_edits.pop(edit_id)
+        path = proposal.get("path", "")
+        old_content = proposal.get("old_content", "")
+        if not path:
+            return False
+        try:
+            if old_content == "":
+                # 原本就不存在，新写入后又被拒绝，删除文件
+                if os.path.exists(path):
+                    os.remove(path)
+                return True
+            directory = os.path.dirname(path)
+            if directory and not os.path.exists(directory):
+                os.makedirs(directory)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(old_content)
+            return True
+        except Exception as e:
+            logger.error(f"恢复文件失败 {path}: {e}", exc_info=True)
+            return False
+
+    def register_approval_future(self, request_id: str, future: Any) -> None:
+        """注册一个等待前端响应的 approval future."""
+        self._approval_futures[request_id] = future
+
+    def request_stop(self) -> None:
+        """请求取消当前正在运行的流式 Agent（协作式取消）."""
+        self._stop_requested = True
+
+    def submit_approval_response(self, request_id: str, choice: str) -> bool:
+        """提交前端 approval 响应，解除对应 approval gate 阻塞.
+
+        Args:
+            request_id: 审批请求 ID（来自 approval_request 消息）.
+            choice: "approve" / "reject" / "approve_all"
+
+        Returns:
+            是否成功提交（False 表示该 request_id 没有等待中的 approval）
+        """
+        future = self._approval_futures.pop(request_id, None)
+        if future is None:
+            return False
+        future.set_result(choice)
+        return True
+
+    def _emit_wire_event(self, event: Dict[str, Any]) -> None:
+        """发送交互事件到外部记录器（如 wire 持久化）.
+
+        事件字典应至少包含 'type' 字段。若未注册回调则静默忽略。
+        """
+        if self.on_wire_event is None:
+            return
+        event_with_ts = {"timestamp": time.time(), **event}
+        try:
+            self.on_wire_event(event_with_ts)
+        except Exception:
+            logger.debug("wire 事件回调失败", exc_info=True)
+
     def run(self, user_input: str) -> str:
         """处理用户输入（非流式）."""
         logger.info(f"用户输入: {user_input[:100]}")
+        self._emit_wire_event({"type": "user_input", "input": user_input})
         try:
             # 入口检查：必要时自动压缩
             self._maybe_compact()
@@ -234,14 +362,18 @@ class LangGraphAgent:
 
             messages = list(result.get("messages", []))
             if not messages:
+                self._emit_wire_event({"type": "error", "text": "Agent 未返回任何消息"})
                 return "[错误] Agent 未返回任何消息."
 
             last_msg = messages[-1]
             content = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+            if content:
+                self._emit_wire_event({"type": "assistant", "text": content})
             logger.info(f"Agent 完成 | 消息数: {len(messages)} | 输出: {len(content)} 字符")
             return content
         except Exception as e:
             logger.error(f"Agent 执行失败: {e}", exc_info=True)
+            self._emit_wire_event({"type": "error", "text": f"Agent 执行失败: {e}"})
             return f"[错误] Agent 执行失败: {e}"
 
     def run_stream(self, user_input: str) -> Iterator[str]:
@@ -251,20 +383,26 @@ class LangGraphAgent:
         从而支持跨轮次的历史累积和持久化.
         """
         logger.info(f"[流式] 用户输入: {user_input[:100]}")
+        self._emit_wire_event({"type": "user_input", "input": user_input})
+        self._pending_assistant_text = ""
         config = self._get_run_config()
         try:
             # 入口检查：必要时自动压缩
             self._maybe_compact()
+            self._stop_requested = False
 
             for event in self.graph.stream(
                 self._build_state(user_input),
                 config=config,
                 stream_mode="messages",
             ):
+                if self._stop_requested:
+                    raise InterruptedError("Agent run cancelled by client")
                 msg, metadata = event
                 if metadata.get("langgraph_node") == "llm":
                     content = msg.content if hasattr(msg, "content") else ""
                     if content:
+                        self._pending_assistant_text += content
                         yield content
 
             # 流式结束后获取最终状态并持久化
@@ -274,6 +412,9 @@ class LangGraphAgent:
                     self.state = final_snapshot.values
                 elif isinstance(final_snapshot, dict):
                     self.state = final_snapshot
+                if self._pending_assistant_text:
+                    self._emit_wire_event({"type": "assistant", "text": self._pending_assistant_text})
+                    self._pending_assistant_text = ""
                 if self.on_state_change:
                     try:
                         self.on_state_change()
@@ -284,6 +425,7 @@ class LangGraphAgent:
                 logger.warning(f"[流式] 获取最终状态失败: {e}")
         except Exception as e:
             logger.error(f"[流式] Agent 执行失败: {e}", exc_info=True)
+            self._emit_wire_event({"type": "error", "text": f"Agent 执行失败: {e}"})
             yield f"[错误] Agent 执行失败: {e}"
             return
 
@@ -299,17 +441,22 @@ class LangGraphAgent:
         使用 stream_mode=["messages", "updates"] 同时监听流式消息和节点更新.
         """
         logger.info(f"[流式+verbose] 用户输入: {user_input[:100]}")
+        self._emit_wire_event({"type": "user_input", "input": user_input})
+        self._pending_assistant_text = ""
         config = self._get_run_config()
         current_phase: Optional[str] = None  # None, "thinking", "assistant"
 
         try:
             self._maybe_compact()
+            self._stop_requested = False
 
             for event in self.graph.stream(
                 self._build_state(user_input),
                 config=config,
                 stream_mode=["messages", "updates"],
             ):
+                if self._stop_requested:
+                    raise InterruptedError("Agent run cancelled by client")
                 mode, data = event
 
                 if mode == "messages":
@@ -338,6 +485,7 @@ class LangGraphAgent:
 
                     # assistant chunk
                     if content:
+                        self._pending_assistant_text += content
                         if current_phase == "thinking":
                             yield {"type": "thinking_end"}
                             current_phase = "assistant"
@@ -354,16 +502,24 @@ class LangGraphAgent:
                             for msg in messages:
                                 if isinstance(msg, AIMessage) and msg.tool_calls:
                                     for tc in msg.tool_calls:
+                                        tool_name = tc.get("name", "")
+                                        tool_args = tc.get("args", {})
+                                        self._emit_wire_event({
+                                            "type": "tool_call",
+                                            "name": tool_name,
+                                            "args": tool_args,
+                                        })
                                         yield {
                                             "type": "tool_call",
-                                            "name": tc.get("name", ""),
-                                            "args": tc.get("args", {}),
+                                            "name": tool_name,
+                                            "args": tool_args,
                                         }
                         elif node_name == "tools":
                             messages = update.get("messages", [])
                             for msg in messages:
                                 if isinstance(msg, ToolMessage):
                                     text = msg.content or ""
+                                    self._emit_wire_event({"type": "observation", "text": text})
                                     yield {"type": "observation", "text": text}
 
             # 结束当前阶段
@@ -371,6 +527,10 @@ class LangGraphAgent:
                 yield {"type": "thinking_end"}
             elif current_phase == "assistant":
                 yield {"type": "assistant_end"}
+
+            if self._pending_assistant_text:
+                self._emit_wire_event({"type": "assistant", "text": self._pending_assistant_text})
+                self._pending_assistant_text = ""
 
             # 保存最终状态
             try:
@@ -390,6 +550,7 @@ class LangGraphAgent:
 
         except Exception as e:
             logger.error(f"[流式+verbose] Agent 执行失败: {e}", exc_info=True)
+            self._emit_wire_event({"type": "error", "text": f"Agent error: {e}"})
             yield {"type": "error", "text": f"Agent error: {e}"}
 
     def get_history(self) -> List[Dict[str, Any]]:
@@ -437,11 +598,23 @@ class LangGraphAgent:
         return result
 
     def _build_system_prompt(self) -> str:
-        """从文件读取默认系统提示模板，并动态插入工具描述."""
-        from pathlib import Path
+        """从包内资源读取默认系统提示模板，并动态插入工具描述."""
+        from importlib.resources import files
 
-        prompt_path = Path(__file__).parent.parent.parent.parent / "prompts" / "default_system_prompt.txt"
-        template = prompt_path.read_text(encoding="utf-8")
+        try:
+            prompt_path = files("ai_coding.prompts").joinpath("default_system_prompt.txt")
+            template = prompt_path.read_text(encoding="utf-8")
+        except Exception as e:
+            logger.warning(f"读取默认系统提示失败: {e}，使用兜底提示")
+            template = (
+                "你是一个 AI 编程助手，专门帮助用户进行代码开发任务。\n"
+                "你可以使用以下工具来完成任务:\n{tools_text}\n\n"
+                "工作原则:\n"
+                "1. 如果任务需要查看或操作文件，请先使用相应工具。\n"
+                "2. 如果任务可以通过直接回答完成，请不要调用工具。\n"
+                "3. 每次回复尽量简洁、准确。\n"
+                "4. 执行命令时请注意安全性。\n"
+            )
 
         tool_descriptions = []
         for tool in self.tools:

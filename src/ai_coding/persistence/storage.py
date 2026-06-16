@@ -11,7 +11,7 @@
 
 import hashlib
 import json
-import os
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -41,6 +41,8 @@ class StorageEngine:
     def __init__(self, root: Optional[Path] = None) -> None:
         self.root = Path(root) if root else _default_storage_root()
         self.index_path = self.root / "session_index.jsonl"
+        # 全局可重入锁，串行化所有持久化操作，避免并发写损坏 JSON/JSONL 文件
+        self._lock = threading.RLock()
         self._ensure_root()
 
     def _ensure_root(self) -> None:
@@ -57,7 +59,7 @@ class StorageEngine:
             return []
         entries = []
         try:
-            with self.index_path.open("r", encoding="utf-8") as f:
+            with self._lock, self.index_path.open("r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line:
@@ -70,7 +72,7 @@ class StorageEngine:
         """保存会话索引."""
         try:
             self.index_path.parent.mkdir(parents=True, exist_ok=True)
-            with self.index_path.open("w", encoding="utf-8") as f:
+            with self._lock, self.index_path.open("w", encoding="utf-8") as f:
                 for entry in entries:
                     f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         except Exception as e:
@@ -166,7 +168,8 @@ class StorageEngine:
         path = self.meta_path(work_dir, session_id)
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+            with self._lock:
+                path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception as e:
             logger.warning(f"保存会话元数据失败 [{session_id}]: {e}")
 
@@ -176,7 +179,8 @@ class StorageEngine:
         if not path.exists():
             return None
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            with self._lock:
+                return json.loads(path.read_text(encoding="utf-8"))
         except Exception as e:
             logger.warning(f"加载会话元数据失败 [{session_id}]: {e}")
             return None
@@ -190,7 +194,8 @@ class StorageEngine:
         path = self.state_path(work_dir, session_id)
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            path.write_text(state_text, encoding="utf-8")
+            with self._lock:
+                path.write_text(state_text, encoding="utf-8")
         except Exception as e:
             logger.warning(f"保存会话状态失败 [{session_id}]: {e}")
 
@@ -200,7 +205,8 @@ class StorageEngine:
         if not path.exists():
             return None
         try:
-            return path.read_text(encoding="utf-8")
+            with self._lock:
+                return path.read_text(encoding="utf-8")
         except Exception as e:
             logger.warning(f"加载会话状态失败 [{session_id}]: {e}")
             return None
@@ -220,7 +226,7 @@ class StorageEngine:
         path = self.wire_path(work_dir, session_id, agent_id)
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            with path.open("a", encoding="utf-8") as f:
+            with self._lock, path.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(event, ensure_ascii=False) + "\n")
         except Exception as e:
             logger.warning(f"追加 wire 记录失败 [{session_id}/{agent_id}]: {e}")
@@ -237,7 +243,7 @@ class StorageEngine:
             return []
         try:
             entries = []
-            with path.open("r", encoding="utf-8") as f:
+            with self._lock, path.open("r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line:

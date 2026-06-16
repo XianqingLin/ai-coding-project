@@ -124,13 +124,13 @@ def create_llm_node(llm: "BaseChatModel"):
         # 记录 LLM 输入摘要
         last_msg = messages[-1] if messages else None
         last_content = (
-            last_msg.content[:200]
+            last_msg.content[:100]
             if last_msg and hasattr(last_msg, "content")
             else ""
         )
         logger.info(
             f"[LLM IN]  messages={len(messages)} "
-            f"last_content={last_content[:100]!r}"
+            f"last_content={last_content!r}"
         )
         t0 = time.time()
 

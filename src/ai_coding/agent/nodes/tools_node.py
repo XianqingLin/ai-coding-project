@@ -4,11 +4,11 @@
 """
 
 import os
-import sys
-from typing import Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from langchain_core.messages import AIMessage, ToolMessage
 
+from ai_coding.agent.nodes._utils import normalize_tool_args
 from ai_coding.agent.state import AgentState
 from ai_coding.logger import get_logger
 from ai_coding.tools.base import ToolRegistry
@@ -17,11 +17,6 @@ from ai_coding.tools.shell_tools import ExecuteCommandTool
 from ai_coding.tools.todo_tool import TodoTool
 
 logger = get_logger(__name__)
-
-# ExitPlanMode 交互保留词
-_EXIT_RESERVED = {"a", "approve", "r", "reject", "x", "reject and exit",
-                   "v", "revise", "q", "quit"}
-
 
 def _parse_read_file_result(result: str) -> tuple[str, str]:
     """从 read_file 返回结果中解析 (path, content).
@@ -96,15 +91,16 @@ def _prompt_plan_approval(plan_content: str, options: List[Dict[str, str]]) -> s
 
     while True:
         try:
-            choice = input("\n请选择 [a/r/x/v" + "".join(str(i + 1) for i in range(len(options))) + "/q]: ").strip()
+            option_indices = "/".join(str(i) for i in range(1, len(options) + 1))
+            choice = input(f"\n请选择 [a/r/x/v/{option_indices}/q]: ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\n[系统] 用户取消输入，默认拒绝并退出 Plan 模式。")
             return "reject_and_exit"
 
         cl = choice.lower()
         if cl in ("q", "quit"):
-            print("\n[系统] 用户退出会话。")
-            sys.exit(0)
+            print("\n[系统] 用户选择退出会话，默认拒绝并退出 Plan 模式。")
+            return "reject_and_exit"
         if cl in ("a", "approve"):
             return "approve"
         if cl in ("r", "reject"):
@@ -125,15 +121,54 @@ def _prompt_plan_approval(plan_content: str, options: List[Dict[str, str]]) -> s
         print("无效选项，请重新输入。")
 
 
-def create_tools_node(tool_registry: ToolRegistry):
+def create_tools_node(
+    tool_registry: ToolRegistry,
+    on_edit_proposal: Optional[Callable[[Dict[str, Any]], None]] = None,
+):
     """创建 Tools 节点函数.
 
     Args:
         tool_registry: 工具注册表，用于查找和执行工具.
+        on_edit_proposal: 当 write_file / edit_file 产生修改时，回调 edit_proposal.
 
     Returns:
         符合 LangGraph 节点签名的 callable.
     """
+
+    def _read_file_raw(path: str) -> str:
+        """读取文件原始内容，失败返回空字符串."""
+        try:
+            if not os.path.exists(path) or os.path.isdir(path):
+                return ""
+            with open(path, "r", encoding="utf-8") as f:
+                return f.read()
+        except Exception as e:
+            logger.debug(f"读取文件旧内容失败 {path}: {e}")
+            return ""
+
+    def _emit_edit_proposal(
+        tool_name: str,
+        path: str,
+        old_content: str,
+        new_content: str,
+        args: Dict[str, Any],
+    ) -> None:
+        """生成并发送 edit_proposal 事件."""
+        if on_edit_proposal is None:
+            return
+        proposal = {
+            "type": "edit_proposal",
+            "id": f"edit_{tool_name}_{id(args)}",
+            "tool": tool_name,
+            "path": path,
+            "old_content": old_content,
+            "new_content": new_content,
+            "description": f"{tool_name}: {path}",
+        }
+        try:
+            on_edit_proposal(proposal)
+        except Exception:
+            logger.debug("edit_proposal 回调失败", exc_info=True)
 
     def tools_node(state: AgentState):
         """执行工具调用并更新文件快照和任务列表."""
@@ -188,11 +223,8 @@ def create_tools_node(tool_registry: ToolRegistry):
                 logger.info(f"[ToolsNode] 跳过已拒绝的调用: {name} ({tool_id})")
                 continue
 
-            # 确保 args 是 dict
-            if hasattr(args, "dict"):
-                args = args.dict()
-            elif not isinstance(args, dict):
-                args = dict(args)
+            # 确保 args 是普通 dict（兼容 Pydantic v1/v2）
+            args = normalize_tool_args(args)
 
             # ---------- Plan 模式约束 ----------
             if plan_mode and name in ("write_file", "edit_file"):
@@ -294,10 +326,17 @@ def create_tools_node(tool_registry: ToolRegistry):
                 continue
 
             # ---------- 常规工具执行 ----------
+            # write_file / edit_file 需要记录旧内容以生成 diff
+            old_content = ""
+            if name == "write_file":
+                old_content = _read_file_raw(args.get("path", ""))
+            elif name == "edit_file":
+                old_content = _read_file_raw(args.get("path", ""))
+
             result = tool_registry.execute(name, args)
             tool_messages.append(ToolMessage(content=result, tool_call_id=tool_id))
 
-            # 根据工具类型更新文件快照
+            # 根据工具类型更新文件快照并生成 edit_proposal
             if name == "read_file":
                 path = args.get("path", "")
                 if path:
@@ -308,18 +347,21 @@ def create_tools_node(tool_registry: ToolRegistry):
             elif name == "write_file":
                 path = args.get("path", "")
                 if path:
+                    new_content = args.get("content", "")
                     # write_file 的 content 就是最新完整内容
-                    file_snapshots[path] = args.get("content", "")
+                    file_snapshots[path] = new_content
                     logger.debug(f"[FileSnapshot] 写入更新: {path}")
+                    _emit_edit_proposal(name, path, old_content, new_content, args)
 
             elif name == "edit_file":
                 path = args.get("path", "")
                 if path and result.startswith("[成功]"):
                     try:
                         read_result = tool_registry.execute("read_file", {"path": path})
-                        _, content = _parse_read_file_result(read_result)
-                        file_snapshots[path] = content
+                        _, new_content = _parse_read_file_result(read_result)
+                        file_snapshots[path] = new_content
                         logger.debug(f"[FileSnapshot] 编辑后刷新: {path}")
+                        _emit_edit_proposal(name, path, old_content, new_content, args)
                     except Exception as e:
                         logger.warning(f"[FileSnapshot] 编辑后刷新失败 {path}: {e}")
 

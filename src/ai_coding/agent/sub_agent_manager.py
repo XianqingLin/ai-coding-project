@@ -94,6 +94,10 @@ class SubAgentManager:
         llm_factory: Optional[Callable[[], Any]] = None,
         run_in_background: bool = False,
         instance_id: Optional[str] = None,
+        event_loop: Any = None,
+        on_approval_request: Optional[Callable[[Dict[str, Any]], None]] = None,
+        on_edit_proposal: Optional[Callable[[Dict[str, Any]], None]] = None,
+        work_dir: Optional[str] = None,
     ) -> str:
         """派发子 Agent 任务.
 
@@ -109,7 +113,13 @@ class SubAgentManager:
             运行结果（同步模式）或任务 ID（后台模式）
         """
         if instance_id and instance_id in self._agents:
-            return self._resume_instance(instance_id, prompt, llm, llm_factory, run_in_background)
+            return self._resume_instance(
+                instance_id, prompt, llm, llm_factory, run_in_background,
+                event_loop=event_loop,
+                on_approval_request=on_approval_request,
+                on_edit_proposal=on_edit_proposal,
+                work_dir=work_dir,
+            )
 
         # 创建新实例
         sid = f"sub_{uuid.uuid4().hex[:8]}"
@@ -129,6 +139,10 @@ class SubAgentManager:
             streaming=False,
             auto_approve=True,
             thread_id=sid,
+            event_loop=event_loop,
+            on_approval_request=on_approval_request,
+            on_edit_proposal=on_edit_proposal,
+            work_dir=work_dir,
         )
 
         instance = SubAgentInstance(
@@ -204,6 +218,10 @@ class SubAgentManager:
         llm: Any,
         llm_factory: Optional[Callable[[], Any]],
         run_in_background: bool,
+        event_loop: Any = None,
+        on_approval_request: Optional[Callable[[Dict[str, Any]], None]] = None,
+        on_edit_proposal: Optional[Callable[[Dict[str, Any]], None]] = None,
+        work_dir: Optional[str] = None,
     ) -> str:
         """唤回已有实例继续运行."""
         with self._lock:
@@ -237,6 +255,10 @@ class SubAgentManager:
                 streaming=False,
                 auto_approve=True,
                 thread_id=instance_id,
+                event_loop=event_loop,
+                on_approval_request=on_approval_request,
+                on_edit_proposal=on_edit_proposal,
+                work_dir=work_dir,
             )
             if old_state is not None:
                 new_agent.state = old_state
@@ -321,11 +343,12 @@ class SubAgentManager:
     @staticmethod
     def _get_tools_for_type(agent_type: str) -> List[Tool]:
         """根据类型返回可用工具列表."""
-        from ai_coding.tools import DEFAULT_TOOLS
+        from ai_coding.tools import create_default_tools
+        tools = create_default_tools()
         tool_names = _SUB_AGENT_TOOL_SETS.get(agent_type)
         if tool_names is None:
-            return list(DEFAULT_TOOLS)
-        all_tools = {t.name: t for t in DEFAULT_TOOLS}
+            return tools
+        all_tools = {t.name: t for t in tools}
         return [all_tools[n] for n in tool_names if n in all_tools]
 
     @staticmethod

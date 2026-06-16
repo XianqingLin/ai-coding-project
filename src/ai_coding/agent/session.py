@@ -5,7 +5,6 @@
 支持完整的状态持久化：AgentState、消息历史、交互记录.
 """
 
-import json
 import time
 import uuid
 from pathlib import Path
@@ -14,6 +13,8 @@ from typing import Any, Callable, Dict, List, Optional
 from ai_coding.agent.core import LangGraphAgent
 from ai_coding.logger import get_logger
 from ai_coding.persistence import StorageEngine, state_from_json, state_to_json
+from ai_coding.persistence.storage import _work_dir_key
+from ai_coding.tools import create_default_tools
 
 logger = get_logger(__name__)
 
@@ -66,15 +67,32 @@ class SessionManager:
         self,
         llm_factory: Callable[[], Any],
         tools: Optional[List] = None,
+        tools_factory: Optional[Callable[[], List]] = None,
         system_prompt: Optional[str] = None,
         auto_approve: bool = False,
         work_dir: Optional[str] = None,
+        event_loop: Any = None,
+        on_approval_request: Optional[Callable[[Dict[str, Any]], None]] = None,
+        on_edit_proposal: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> None:
         self.llm_factory = llm_factory
-        self.tools = tools or []
         self.system_prompt = system_prompt
         self.auto_approve = auto_approve
         self.work_dir = str(Path(work_dir).resolve()) if work_dir else str(Path.cwd().resolve())
+        self.event_loop = event_loop
+        self.on_approval_request = on_approval_request
+        self.on_edit_proposal = on_edit_proposal
+
+        if tools_factory is not None:
+            self.tools_factory = tools_factory
+        elif tools is not None:
+            logger.warning(
+                "SessionManager 收到 tools 列表而非 tools_factory；"
+                "多个会话将共享同一组工具实例，可能导致状态污染。"
+            )
+            self.tools_factory = lambda: list(tools)
+        else:
+            self.tools_factory = create_default_tools
 
         self.storage = StorageEngine()
         self.sessions: Dict[str, Session] = {}
@@ -105,7 +123,12 @@ class SessionManager:
                 continue
 
             thread_id = meta.get("thread_id")
-            agent = self._create_agent(thread_id=thread_id)
+            agent = self._create_agent(
+                thread_id=thread_id,
+                event_loop=self.event_loop,
+                on_approval_request=self.on_approval_request,
+                on_edit_proposal=self.on_edit_proposal,
+            )
 
             # 尝试恢复 AgentState
             state_text = self.storage.load_state(self.work_dir, sid)
@@ -123,6 +146,7 @@ class SessionManager:
                 agent=agent,
                 work_dir=self.work_dir,
             )
+            self._bind_session_callbacks(session)
             self.sessions[sid] = session
 
         # 设置当前会话：优先使用索引中标记的，否则取第一个
@@ -154,34 +178,57 @@ class SessionManager:
             self._mark_current_in_index(session.session_id)
 
     def _mark_current_in_index(self, session_id: str) -> None:
-        """在索引中标记当前会话."""
-        entries = self.storage.list_sessions()
+        """在索引中标记当前会话.
+
+        is_current 只作用于当前 work_dir，避免多项目同时打开时互相覆盖。
+        """
+        entries = self.storage._load_index()
+        current_key = _work_dir_key(self.work_dir)
         for entry in entries:
-            entry["is_current"] = (entry.get("session_id") == session_id)
-        # 重写索引
-        import json as _json
+            if entry.get("work_dir_key") == current_key:
+                entry["is_current"] = (entry.get("session_id") == session_id)
         try:
-            path = self.storage.index_path
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("w", encoding="utf-8") as f:
-                for entry in entries:
-                    f.write(_json.dumps(entry, ensure_ascii=False) + "\n")
+            self.storage._save_index(entries)
         except Exception as e:
             logger.warning(f"更新当前会话标记失败: {e}")
 
-    def _create_agent(self, thread_id: Optional[str] = None) -> LangGraphAgent:
-        """创建新的 Agent 实例."""
+    def _create_agent(
+        self,
+        thread_id: Optional[str] = None,
+        event_loop: Any = None,
+        on_approval_request: Optional[Callable[[Dict[str, Any]], None]] = None,
+        on_edit_proposal: Optional[Callable[[Dict[str, Any]], None]] = None,
+    ) -> LangGraphAgent:
+        """创建新的 Agent 实例（每次使用新的工具实例，避免会话间状态共享）."""
         return LangGraphAgent(
             llm=self.llm_factory(),
-            tools=self.tools,
+            tools=self.tools_factory(),
             system_prompt=self.system_prompt,
             thread_id=thread_id,
             max_iterations=10,
             streaming=True,
             auto_approve=self.auto_approve,
+            work_dir=self.work_dir,
             llm_factory=self.llm_factory,
             on_state_change=lambda: self.save_state(),
+            event_loop=event_loop,
+            on_approval_request=on_approval_request,
+            on_edit_proposal=on_edit_proposal,
         )
+
+    def _bind_session_callbacks(self, session: Session) -> None:
+        """为已创建的 Session 绑定 Agent 回调.
+
+        注意：回调在 Session 创建/恢复后绑定，以便拿到稳定的 session_id。
+        """
+
+        def on_wire_event(event: Dict[str, Any]) -> None:
+            self.append_wire(event, session_id=session.session_id, agent_id="main")
+
+        session.agent.on_wire_event = on_wire_event
+        session.agent.event_loop = self.event_loop
+        session.agent.on_approval_request = self.on_approval_request
+        session.agent.on_edit_proposal = self.on_edit_proposal
 
     # ------------------------------------------------------------------ #
     # 公开 API
@@ -199,7 +246,11 @@ class SessionManager:
         """
         sid = uuid.uuid4().hex[:8]
         name = name.strip() or f"session-{sid}"
-        agent = self._create_agent()
+        agent = self._create_agent(
+            event_loop=self.event_loop,
+            on_approval_request=self.on_approval_request,
+            on_edit_proposal=self.on_edit_proposal,
+        )
         session = Session(
             session_id=sid,
             name=name,
@@ -207,6 +258,7 @@ class SessionManager:
             agent=agent,
             work_dir=self.work_dir,
         )
+        self._bind_session_callbacks(session)
         self.sessions[sid] = session
         self.current_session_id = sid
         self._save_session_meta(session, is_current=True)

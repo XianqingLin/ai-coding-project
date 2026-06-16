@@ -33,6 +33,12 @@ class ReadFileTool(Tool):
         ]
 
     def execute(self, path: str, line_offset: int = 1, n_lines: int = 300) -> str:
+        try:
+            target = self._resolve_path(path, must_exist=True)
+        except Exception as e:
+            return f"[错误] {e}"
+        path = str(target)
+
         if not os.path.exists(path):
             return f"[错误] 文件不存在: {path}"
 
@@ -95,6 +101,12 @@ class WriteFileTool(Tool):
         ]
 
     def execute(self, path: str, content: str) -> str:
+        try:
+            target = self._resolve_path(path, must_exist=False)
+        except Exception as e:
+            return f"[错误] {e}"
+        path = str(target)
+
         try:
             directory = os.path.dirname(path)
             if directory and not os.path.exists(directory):
@@ -166,6 +178,12 @@ class EditFile(Tool):
         return best_match, best_ratio
 
     def execute(self, path: str, old_string: str, new_string: str) -> str:
+        try:
+            target = self._resolve_path(path, must_exist=True)
+        except Exception as e:
+            return f"[错误] {e}"
+        path = str(target)
+
         if not os.path.exists(path):
             return f"[错误] 文件不存在: {path}"
 
@@ -249,6 +267,12 @@ class GrepTool(Tool):
         ]
 
     def execute(self, pattern: str, path: str = ".", glob: str = None, output_mode: str = "content") -> str:
+        try:
+            target = self._resolve_path(path, must_exist=True)
+        except Exception as e:
+            return f"[错误] {e}"
+        path = str(target)
+
         if not os.path.exists(path):
             return f"[错误] 路径不存在: {path}"
 
@@ -372,6 +396,12 @@ class ListDirTool(Tool):
         ]
 
     def execute(self, path: str = ".") -> str:
+        try:
+            target = self._resolve_path(path, must_exist=True)
+        except Exception as e:
+            return f"[错误] {e}"
+        path = str(target)
+
         if not os.path.exists(path):
             return f"[错误] 目录不存在: {path}"
 
@@ -430,6 +460,12 @@ class GlobTool(Tool):
         ]
 
     def execute(self, pattern: str, path: str = ".") -> str:
+        try:
+            target = self._resolve_path(path, must_exist=True)
+        except Exception as e:
+            return f"[错误] {e}"
+        path = str(target)
+
         if not os.path.exists(path):
             return f"[错误] 路径不存在: {path}"
         if not os.path.isdir(path):
@@ -450,6 +486,10 @@ class GlobTool(Tool):
                 "[错误] 含花括号扩展（{a,b,c}）的模式被拒绝，请展开后分别查询。\n"
                 "示例: 将 '*.{py,js}' 拆分为两次查询 '*.py' 和 '*.js'"
             )
+
+        # 拒绝包含 .. 的 glob 模式
+        if ".." in clean_pattern:
+            return "[错误] glob 模式包含 '..'，被拒绝"
 
         search_path = os.path.join(path, clean_pattern)
         try:
