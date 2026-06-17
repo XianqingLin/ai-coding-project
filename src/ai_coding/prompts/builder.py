@@ -96,13 +96,15 @@ class SystemPromptBuilder:
         self.guideline_files = guideline_files or list(self.DEFAULT_GUIDELINE_FILES)
 
     def _read_resource(self, filename: str) -> str:
-        """读取 prompts 包资源文件."""
-        try:
-            path = files("ai_coding.prompts").joinpath(filename)
-            return path.read_text(encoding="utf-8")
-        except Exception as e:
-            logger.warning(f"读取提示资源失败 {filename}: {e}")
-            return ""
+        """读取 prompts 包资源文件.
+
+        Raises:
+            FileNotFoundError: 当指定的资源文件不存在时.
+        """
+        path = files("ai_coding.prompts").joinpath(filename)
+        if not path.exists():
+            raise FileNotFoundError(f"Prompt guideline file not found: {filename}")
+        return path.read_text(encoding="utf-8")
 
     def _build_main_section(self) -> str:
         """构建主模板段落."""

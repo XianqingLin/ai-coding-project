@@ -124,7 +124,7 @@ class AgentService:
         return session_id
 
     def _get_agent(self, session_id: Optional[str] = None) -> Optional[LangGraphAgent]:
-        """获取指定会话的 Agent 实例."""
+        """获取指定会话的 Agent 实例（写操作：会隐式切换当前会话）."""
         sid = self._resolve_session_id(session_id)
         if sid is None:
             return None
@@ -134,6 +134,15 @@ class AgentService:
         if not self._sm.switch(sid):
             return None
         return self._sm.get_current_agent()
+
+    def _get_agent_safe(self, session_id: Optional[str] = None) -> Optional[LangGraphAgent]:
+        """获取指定会话的 Agent 实例（只读：无副作用，不切换当前会话）."""
+        sid = self._resolve_session_id(session_id)
+        if sid is None:
+            return None
+        if sid == self._sm.current_session_id:
+            return self._sm.get_current_agent()
+        return self._sm.get_agent(sid)
 
     # ------------------------------------------------------------------ #
     # 消息发送
@@ -222,29 +231,29 @@ class AgentService:
     # ------------------------------------------------------------------ #
 
     def get_history(self, session_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        """获取指定会话的对话历史."""
-        agent = self._get_agent(session_id)
+        """获取指定会话的对话历史（只读，不切换当前会话）."""
+        agent = self._get_agent_safe(session_id)
         if agent is None:
             return []
         return agent.get_history()
 
     def get_context_usage(self, session_id: Optional[str] = None) -> Dict[str, Any]:
-        """获取指定会话的上下文窗口使用情况."""
-        agent = self._get_agent(session_id)
+        """获取指定会话的上下文窗口使用情况（只读，不切换当前会话）."""
+        agent = self._get_agent_safe(session_id)
         if agent is None:
             return {"used_tokens": 0, "limit_tokens": 0, "percentage": 0.0}
         return agent.get_context_usage()
 
     def get_stats(self, session_id: Optional[str] = None) -> Dict[str, Any]:
-        """获取 Agent 运行统计信息."""
-        agent = self._get_agent(session_id)
+        """获取 Agent 运行统计信息（只读，不切换当前会话）."""
+        agent = self._get_agent_safe(session_id)
         if agent is None:
             return {}
         return agent.get_stats()
 
     def get_system_prompt(self, session_id: Optional[str] = None) -> str:
-        """获取指定会话当前使用的 system prompt."""
-        agent = self._get_agent(session_id)
+        """获取指定会话当前使用的 system prompt（只读，不切换当前会话）."""
+        agent = self._get_agent_safe(session_id)
         return agent.system_prompt if agent else ""
 
     def get_current_session(self) -> Optional[Dict[str, Any]]:

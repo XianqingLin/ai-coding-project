@@ -307,9 +307,29 @@ class LangGraphAgent:
             logger.error(f"恢复文件失败 {path}: {e}", exc_info=True)
             return False
 
-    def register_approval_future(self, request_id: str, future: Any) -> None:
-        """注册一个等待前端响应的 approval future."""
+    def register_approval_future(self, request_id: str, future: Any) -> Any:
+        """注册一个等待前端响应的 approval future.
+
+        若 request_id 已存在且未完成，则返回已有的 future（防止 LangGraph
+        checkpoint 重放时重复创建）。注册成功后在 future 上附加
+        done_callback，完成后自动清理 registry。
+
+        Returns:
+            应被等待的 future 对象（新注册的或已存在的）。
+        """
+        existing = self._approval_futures.get(request_id)
+        if existing is not None and not existing.done():
+            return existing
+
         self._approval_futures[request_id] = future
+
+        def _cleanup(fut):
+            # 仅当仍是当前注册的 future 时才清理，避免误删重放的注册
+            if self._approval_futures.get(request_id) is fut:
+                self._approval_futures.pop(request_id, None)
+
+        future.add_done_callback(_cleanup)
+        return future
 
     def request_stop(self) -> None:
         """请求取消当前正在运行的流式 Agent（协作式取消）."""
@@ -344,6 +364,39 @@ class LangGraphAgent:
         except Exception:
             logger.debug("wire 事件回调失败", exc_info=True)
 
+    def _is_api_or_network_error(self, e: Exception) -> bool:
+        """启发式判断异常是否为 API/网络相关."""
+        module = type(e).__module__.lower()
+        name = type(e).__name__.lower()
+        indicators = [
+            "openai", "anthropic", "google", "http", "urllib", "requests",
+            "connectionerror", "timeout", "apierror", "ratelimit",
+            "authenticationerror", "serviceunavailable",
+        ]
+        combined = f"{module}.{name}"
+        err_str = str(e).lower()
+        return any(ind in combined or ind in err_str for ind in indicators)
+
+    def _handle_run_exception(self, e: Exception, method_name: str) -> str:
+        """分类处理运行异常，返回用户友好的错误信息."""
+        if isinstance(e, RecursionError):
+            msg = (
+                "Agent 迭代次数过多，已达到递归上限。"
+                "请尝试简化任务或增加 max_iterations。"
+            )
+            logger.error(f"[{method_name}] 递归上限: {e}", exc_info=True)
+        elif isinstance(e, InterruptedError):
+            msg = "Agent 运行已取消。"
+            logger.info(f"[{method_name}] 用户取消: {e}")
+        elif self._is_api_or_network_error(e):
+            msg = f"API/网络异常: {e}。请检查网络连接或 API 配置。"
+            logger.error(f"[{method_name}] API/网络异常: {e}", exc_info=True)
+        else:
+            msg = f"Agent 执行失败: {e}"
+            logger.error(f"[{method_name}] Agent 执行失败: {e}", exc_info=True)
+        self._emit_wire_event({"type": "error", "text": msg})
+        return msg
+
     def run(self, user_input: str) -> str:
         """处理用户输入（非流式）."""
         logger.info(f"用户输入: {user_input[:100]}")
@@ -377,9 +430,8 @@ class LangGraphAgent:
             logger.info(f"Agent 完成 | 消息数: {len(messages)} | 输出: {len(content)} 字符")
             return content
         except Exception as e:
-            logger.error(f"Agent 执行失败: {e}", exc_info=True)
-            self._emit_wire_event({"type": "error", "text": f"Agent 执行失败: {e}"})
-            return f"[错误] Agent 执行失败: {e}"
+            msg = self._handle_run_exception(e, "run")
+            return f"[错误] {msg}"
 
     def run_stream(self, user_input: str) -> Iterator[str]:
         """处理用户输入（流式输出）.
@@ -429,9 +481,8 @@ class LangGraphAgent:
             except Exception as e:
                 logger.warning(f"[流式] 获取最终状态失败: {e}")
         except Exception as e:
-            logger.error(f"[流式] Agent 执行失败: {e}", exc_info=True)
-            self._emit_wire_event({"type": "error", "text": f"Agent 执行失败: {e}"})
-            yield f"[错误] Agent 执行失败: {e}"
+            msg = self._handle_run_exception(e, "run_stream")
+            yield f"[错误] {msg}"
             return
 
     def run_stream_verbose(self, user_input: str) -> Iterator[Dict[str, Any]]:
@@ -554,9 +605,9 @@ class LangGraphAgent:
                 logger.warning(f"[流式+verbose] 获取最终状态失败: {e}")
 
         except Exception as e:
-            logger.error(f"[流式+verbose] Agent 执行失败: {e}", exc_info=True)
-            self._emit_wire_event({"type": "error", "text": f"Agent error: {e}"})
-            yield {"type": "error", "text": f"Agent error: {e}"}
+            msg = self._handle_run_exception(e, "run_stream_verbose")
+            self._emit_wire_event({"type": "error", "text": msg})
+            yield {"type": "error", "text": msg}
 
     def get_history(self) -> List[Dict[str, Any]]:
         """获取当前会话的完整对话历史."""

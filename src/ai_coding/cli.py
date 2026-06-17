@@ -130,12 +130,34 @@ def session_delete(
         raise typer.Exit(1)
 
 
+def _configure_windows_encoding() -> None:
+    """在 Windows 上强制 stdout/stderr 使用 UTF-8 编码.
+
+    Windows 终端默认使用 GBK（代码页 936），当输出包含 emoji 或其他非
+    ASCII 字符时，typer/click 的 echo 会抛出 UnicodeEncodeError。
+    在 CLI 入口尽早将标准流重配置为 UTF-8，避免乱码和崩溃。
+    """
+    import sys
+
+    if sys.platform != "win32":
+        return
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                # 某些测试或重定向场景下 reconfigure 可能不可用，忽略
+                pass
+
+
 def main() -> None:
     """CLI 入口.
 
     无参数时默认执行 chat 命令.
     """
     import sys
+
+    _configure_windows_encoding()
 
     if len(sys.argv) == 1:
         sys.argv.append("chat")

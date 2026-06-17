@@ -102,23 +102,33 @@ def create_approval_gate(
                 }
 
                 future: Future[str] = Future()
+                registered_future = future
                 if register_approval_future is not None:
-                    register_approval_future(request_id, future)
+                    registered_future = register_approval_future(request_id, future)
 
-                try:
-                    on_approval_request(request)
-                except Exception as e:
-                    logger.error(f"[Approval] 发送审批请求失败: {e}", exc_info=True)
-                    rejected_messages.append(
-                        ToolMessage(
-                            content=f"[系统] 发送 '{name}' 审批请求失败: {e}。调用已拒绝。",
-                            tool_call_id=tool_call_id,
-                        )
+                # 若返回的不是新创建的 future，说明 LangGraph checkpoint 重放，
+                # 已有 pending future，复用它且不再重复发送请求。
+                is_replay = registered_future is not future
+                if is_replay:
+                    logger.info(
+                        f"[Approval] request_id={request_id} 已存在 pending future，"
+                        "跳过重复发送请求"
                     )
-                    continue
+                else:
+                    try:
+                        on_approval_request(request)
+                    except Exception as e:
+                        logger.error(f"[Approval] 发送审批请求失败: {e}", exc_info=True)
+                        rejected_messages.append(
+                            ToolMessage(
+                                content=f"[系统] 发送 '{name}' 审批请求失败: {e}。调用已拒绝。",
+                                tool_call_id=tool_call_id,
+                            )
+                        )
+                        continue
 
                 pending_requests.append({
-                    "future": future,
+                    "future": registered_future,
                     "request_id": request_id,
                     "tool": name,
                     "tool_call_id": tool_call_id,

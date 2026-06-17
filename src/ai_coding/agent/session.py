@@ -348,6 +348,18 @@ class SessionManager:
         session = self.current
         return session.agent if session else None
 
+    def get_agent(self, session_id: str) -> Optional[LangGraphAgent]:
+        """获取指定会话的 Agent 实例（不切换当前会话）.
+
+        Args:
+            session_id: 目标会话 ID.
+
+        Returns:
+            Agent 实例，若会话不存在则返回 None.
+        """
+        session = self.sessions.get(session_id)
+        return session.agent if session else None
+
     def rename(self, session_id: str, new_name: str) -> bool:
         """重命名会话.
 

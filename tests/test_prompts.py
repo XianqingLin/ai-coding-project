@@ -85,3 +85,15 @@ def test_system_prompt_structure() -> None:
     assert env_pos != -1
     assert date_pos != -1
     assert main_pos < tool_pos < system_pos < env_pos < date_pos
+
+
+def test_system_prompt_builder_missing_guideline_file() -> None:
+    """当传入不存在的 guideline 文件时，应抛出 FileNotFoundError，并包含文件名."""
+    import pytest
+
+    builder = SystemPromptBuilder(guideline_files=["nonexistent_guideline.txt"])
+
+    with pytest.raises(FileNotFoundError) as exc_info:
+        builder.build()
+
+    assert "nonexistent_guideline.txt" in str(exc_info.value)
