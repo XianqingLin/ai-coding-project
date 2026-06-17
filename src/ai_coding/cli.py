@@ -8,11 +8,8 @@ from typing import Optional
 
 import typer
 
-from ai_coding.config import DEFAULT_LLM_PROVIDER
-from ai_coding.llm import create_lc_llm
-from ai_coding.agent import SessionManager
+from ai_coding.agent import AgentService
 from ai_coding.logger import setup_logging, get_logger
-from ai_coding.tools import create_default_tools
 
 
 logger = get_logger(__name__)
@@ -34,15 +31,9 @@ def _resolve_work_dir(work_dir: str) -> str:
     return str(path)
 
 
-def _create_sm(work_dir: str, auto_approve: bool = False) -> SessionManager:
-    """创建 SessionManager 实例."""
-    provider = DEFAULT_LLM_PROVIDER
-    return SessionManager(
-        llm_factory=lambda: create_lc_llm(provider),
-        tools_factory=create_default_tools,
-        auto_approve=auto_approve,
-        work_dir=work_dir,
-    )
+def _create_service(work_dir: str, auto_approve: bool = False) -> AgentService:
+    """创建 AgentService 实例."""
+    return AgentService(work_dir=work_dir, auto_approve=auto_approve)
 
 
 @app.command()
@@ -55,19 +46,14 @@ def ask(
     """向 Agent 发送一次性指令并打印回复."""
     setup_logging()
     work_dir = _resolve_work_dir(work_dir)
-    sm = _create_sm(work_dir, auto_approve)
+    service = _create_service(work_dir, auto_approve)
 
     if session:
-        if not sm.switch(session):
+        if not service.switch_session(session):
             typer.echo(f"[错误] 会话不存在: {session}", err=True)
             raise typer.Exit(1)
 
-    agent = sm.get_current_agent()
-    if agent is None:
-        typer.echo("[错误] 当前没有活跃的会话", err=True)
-        raise typer.Exit(1)
-
-    result = agent.run(prompt)
+    result = service.send_message(prompt)
     typer.echo(result)
 
 
@@ -90,8 +76,8 @@ def session_list(
 ):
     """列出所有会话."""
     work_dir = _resolve_work_dir(work_dir)
-    sm = _create_sm(work_dir)
-    sessions = sm.list()
+    service = _create_service(work_dir)
+    sessions = service.list_sessions()
     if not sessions:
         typer.echo("No sessions.")
         return
@@ -109,8 +95,8 @@ def session_new(
 ):
     """创建新会话."""
     work_dir = _resolve_work_dir(work_dir)
-    sm = _create_sm(work_dir)
-    sid = sm.create(name=name)
+    service = _create_service(work_dir)
+    sid = service.create_session(name=name)
     typer.echo(f"Created session: {sid}")
 
 
@@ -121,8 +107,8 @@ def session_switch(
 ):
     """切换到指定会话."""
     work_dir = _resolve_work_dir(work_dir)
-    sm = _create_sm(work_dir)
-    if sm.switch(session_id):
+    service = _create_service(work_dir)
+    if service.switch_session(session_id):
         typer.echo(f"Switched to: {session_id}")
     else:
         typer.echo(f"Session not found: {session_id}", err=True)
@@ -136,8 +122,8 @@ def session_delete(
 ):
     """删除指定会话."""
     work_dir = _resolve_work_dir(work_dir)
-    sm = _create_sm(work_dir)
-    if sm.delete(session_id):
+    service = _create_service(work_dir)
+    if service.delete_session(session_id):
         typer.echo(f"Deleted session: {session_id}")
     else:
         typer.echo(f"Session not found: {session_id}", err=True)

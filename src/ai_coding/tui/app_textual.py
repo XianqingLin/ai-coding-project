@@ -17,8 +17,18 @@ from textual.app import App, ComposeResult
 from textual.containers import VerticalScroll
 from textual.widgets import Input, Static, Collapsible
 
-from ai_coding.agent import SessionManager
-from ai_coding.agent.core import DEFAULT_CONTEXT_LIMIT
+from ai_coding.agent import AgentService
+from ai_coding.agent.events import (
+    AssistantChunkEvent,
+    AssistantEndEvent,
+    AssistantStartEvent,
+    ErrorEvent,
+    ObservationEvent,
+    ThinkingChunkEvent,
+    ThinkingEndEvent,
+    ThinkingStartEvent,
+    ToolCallEvent,
+)
 from ai_coding.config import DEFAULT_LLM_PROVIDER
 
 
@@ -121,8 +131,8 @@ class AICodingApp(App):
     }
     """
 
-    def __init__(self, sm: SessionManager) -> None:
-        self.sm = sm
+    def __init__(self, service: AgentService) -> None:
+        self.service = service
         self._pending_input: str = ""
         self._last_assistant_widget: Optional[Static] = None
         self._last_thinking_widget: Optional[Static] = None
@@ -156,12 +166,13 @@ class AICodingApp(App):
     def _render_welcome(self) -> None:
         """渲染 Welcome Panel."""
         welcome = self.query_one("#welcome", Static)
-        session_name = self.sm.current.name if self.sm.current else "default"
+        current = self.service.get_current_session()
+        session_name = current.get("name", "default") if current else "default"
         lines = [
             "[bold #89b4fa]Welcome to AI Coding![/bold #89b4fa]",
             "[dim]Send /help for help information.[/dim]",
             "",
-            f"[dim]Directory:[/dim] {self.sm.work_dir}",
+            f"[dim]Directory:[/dim] {self.service.work_dir}",
             f"[dim]Session:[/dim]   {session_name}",
             f"[dim]Model:[/dim]     {DEFAULT_LLM_PROVIDER}",
         ]
@@ -171,26 +182,24 @@ class AICodingApp(App):
     def _update_statusbar(self) -> None:
         """更新状态栏."""
         statusbar = self.query_one("#statusbar", Static)
-        agent = self.sm.get_current_agent()
         context_info = ""
-        if agent and hasattr(agent, "get_context_usage"):
-            try:
-                usage = agent.get_context_usage()
-                pct = usage.get("percentage", 0.0)
-                used = usage.get("used_tokens", 0)
-                limit = usage.get("limit_tokens", 0)
-                context_info = (
-                    f"context: {pct}% ({used / 1000:.1f}k/{limit / 1000:.1f}k)"
-                )
-            except Exception:
-                pass
+        try:
+            usage = self.service.get_context_usage()
+            pct = usage.get("percentage", 0.0)
+            used = usage.get("used_tokens", 0)
+            limit = usage.get("limit_tokens", 0)
+            context_info = (
+                f"context: {pct}% ({used / 1000:.1f}k/{limit / 1000:.1f}k)"
+            )
+        except Exception:
+            pass
 
-        session = self.sm.current
+        current = self.service.get_current_session()
         session_info = ""
-        if session:
-            session_info = f"{session.name} ({session.session_id})"
+        if current:
+            session_info = f"{current['name']} ({current['session_id']})"
 
-        left = f"{DEFAULT_LLM_PROVIDER}  {session_info}  {self.sm.work_dir}"
+        left = f"{DEFAULT_LLM_PROVIDER}  {session_info}  {self.service.work_dir}"
         right = context_info
 
         try:
@@ -205,19 +214,30 @@ class AICodingApp(App):
     # 消息操作
     # ------------------------------------------------------------------ #
 
+    def _auto_scroll(self, history: VerticalScroll) -> None:
+        """仅在用户已滚动到底部时自动滚动到底部.
+
+        避免用户在查看历史上方内容时，被流式输出强制拉回底部.
+        """
+        try:
+            if history.is_vertical_scroll_end:
+                history.scroll_end(animate=False)
+        except Exception:
+            history.scroll_end(animate=False)
+
     def _add_user_message(self, text: str) -> None:
         """添加用户消息."""
         history = self.query_one("#history", VerticalScroll)
         msg = Static(f"✨ {text}", classes="user-message")
         history.mount(msg)
-        history.scroll_end(animate=False)
+        self._auto_scroll(history)
 
     def _add_assistant_message(self, text: str) -> Static:
         """添加助手消息."""
         history = self.query_one("#history", VerticalScroll)
         msg = Static(f"● {text}", classes="assistant-message")
         history.mount(msg)
-        history.scroll_end(animate=False)
+        self._auto_scroll(history)
         return msg
 
     def _start_new_assistant_response(self) -> None:
@@ -233,7 +253,7 @@ class AICodingApp(App):
         # 流式过程中显示原始文本+进度指示，避免未闭合 Markdown 标记导致格式错乱
         self._last_assistant_widget.update(f"● {self._current_assistant_text}")
         history = self.query_one("#history", VerticalScroll)
-        history.scroll_end(animate=False)
+        self._auto_scroll(history)
 
     def _finish_assistant_response(self) -> None:
         """Assistant 流式结束，用 Markdown 渲染最终回复."""
@@ -258,7 +278,7 @@ class AICodingApp(App):
             classes="thinking-collapsible",
         )
         history.mount(collapsible)
-        history.scroll_end(animate=False)
+        self._auto_scroll(history)
         self._last_thinking_widget = content
 
     def _append_thinking_chunk(self, text: str) -> None:
@@ -268,7 +288,7 @@ class AICodingApp(App):
         self._current_thinking_text += text
         self._last_thinking_widget.update(self._current_thinking_text)
         history = self.query_one("#history", VerticalScroll)
-        history.scroll_end(animate=False)
+        self._auto_scroll(history)
 
     # ------------------------------------------------------------------ #
     # Tool 折叠面板
@@ -324,7 +344,7 @@ class AICodingApp(App):
             classes="tool-collapsible",
         )
         history.mount(collapsible)
-        history.scroll_end(animate=False)
+        self._auto_scroll(history)
         self._last_tool_widget = content
         self._last_tool_collapsible = collapsible
 
@@ -346,21 +366,21 @@ class AICodingApp(App):
                 pass
 
         history = self.query_one("#history", VerticalScroll)
-        history.scroll_end(animate=False)
+        self._auto_scroll(history)
 
     def _add_system_message(self, text: str) -> None:
         """添加系统消息."""
         history = self.query_one("#history", VerticalScroll)
         msg = Static(text, classes="system-message")
         history.mount(msg)
-        history.scroll_end(animate=False)
+        self._auto_scroll(history)
 
     def _add_error_message(self, text: str) -> None:
         """添加错误消息."""
         history = self.query_one("#history", VerticalScroll)
         msg = Static(text, classes="error-message")
         history.mount(msg)
-        history.scroll_end(animate=False)
+        self._auto_scroll(history)
 
     def _clear_history(self) -> None:
         """清空历史（保留 Welcome）."""
@@ -403,7 +423,6 @@ class AICodingApp(App):
         """处理内置命令."""
         parts = text.split()
         cmd = parts[0].lower()
-        agent = self.sm.get_current_agent()
 
         if cmd in ("/exit", "/quit"):
             self.exit()
@@ -418,8 +437,7 @@ class AICodingApp(App):
                 "  /session switch ID — Switch session\n"
                 "  /session rm ID     — Remove session\n"
                 "  /session rename ID NAME\n"
-                "  /status            — Show context usage\n"
-                "  /tools             — List available tools\n"
+                "  /prompt            — Show current system prompt\n"
                 "  /history           — Show conversation history\n"
                 "  /clear             — Clear history\n"
                 "  /exit              — Exit\n"
@@ -427,20 +445,12 @@ class AICodingApp(App):
             )
             return
 
-        if cmd == "/status":
-            if agent is None or not hasattr(agent, "get_context_usage"):
-                self._add_system_message("Status not available.")
+        if cmd == "/prompt":
+            prompt = self.service.get_system_prompt()
+            if not prompt:
+                self._add_system_message("System prompt is empty.")
                 return
-            usage = agent.get_context_usage()
-            used = usage.get("used_tokens", 0)
-            limit = usage.get("limit_tokens", DEFAULT_CONTEXT_LIMIT)
-            pct = usage.get("percentage", 0.0)
-            bar_len = 20
-            filled = int(bar_len * pct / 100)
-            bar = "█" * filled + "░" * (bar_len - filled)
-            self._add_system_message(
-                f"Context: [{bar}] {pct}% ({used:,} / {limit:,} tokens)"
-            )
+            self._add_system_message(f"Current system prompt:\n{'-'*50}\n{prompt}")
             return
 
         if cmd == "/clear":
@@ -448,35 +458,17 @@ class AICodingApp(App):
             return
 
         if cmd == "/new":
-            sid = self.sm.create()
-            session = self.sm.current
+            sid = self.service.create_session()
+            current = self.service.get_current_session()
             self._add_system_message(
-                f"New session: {session.name if session else sid}"
+                f"New session: {current['name'] if current else sid}"
             )
             self._render_welcome()
             self._update_statusbar()
             return
 
-        if cmd == "/tools":
-            if agent is None:
-                self._add_error_message("No agent available.")
-                return
-            stats = agent.get_stats()
-            tools = stats.get("tools", [])
-            if not tools:
-                self._add_system_message("No tools available.")
-                return
-            lines = [f"Available tools ({len(tools)}):"]
-            for name in tools:
-                lines.append(f"  - {name}")
-            self._add_system_message("\n".join(lines))
-            return
-
         if cmd == "/history":
-            if agent is None:
-                self._add_error_message("No agent available.")
-                return
-            history = agent.get_history()
+            history = self.service.get_history()
             if not history:
                 self._add_system_message("History is empty.")
                 return
@@ -513,7 +505,7 @@ class AICodingApp(App):
         sub = parts[1].lower()
 
         if sub == "list":
-            sessions = self.sm.list()
+            sessions = self.service.list_sessions()
             if not sessions:
                 self._add_system_message("No sessions.")
                 return
@@ -531,7 +523,7 @@ class AICodingApp(App):
                 self._add_system_message("Usage: /session switch <ID>")
                 return
             sid = parts[2]
-            if self.sm.switch(sid):
+            if self.service.switch_session(sid):
                 self._add_system_message(f"Switched to: {sid}")
                 self._render_welcome()
                 self._update_statusbar()
@@ -543,12 +535,12 @@ class AICodingApp(App):
                 self._add_system_message("Usage: /session rm <ID>")
                 return
             sid = parts[2]
-            if self.sm.delete(sid):
-                current = self.sm.current
-                if current and current.session_id != sid:
+            if self.service.delete_session(sid):
+                current = self.service.get_current_session()
+                if current and current["session_id"] != sid:
                     self._add_system_message(
                         f"Deleted session: {sid}. "
-                        f"Current session: {current.name} ({current.session_id})"
+                        f"Current session: {current['name']} ({current['session_id']})"
                     )
                 else:
                     self._add_system_message(f"Deleted session: {sid}")
@@ -563,7 +555,7 @@ class AICodingApp(App):
                 return
             sid = parts[2]
             name = " ".join(parts[3:])
-            if self.sm.rename(sid, name):
+            if self.service.rename_session(sid, name):
                 self._add_system_message(f"Renamed to: {name}")
                 self._update_statusbar()
             else:
@@ -579,7 +571,7 @@ class AICodingApp(App):
     def _run_agent_task(self) -> None:
         """在后台线程中运行 Agent（由 run_worker 调用).
 
-        统一使用流式+verbose 模式.
+        统一使用流式事件模式.
         """
         user_input = self._pending_input
         self._last_assistant_widget = None
@@ -588,49 +580,38 @@ class AICodingApp(App):
         self._last_tool_collapsible = None
         self._current_assistant_text = ""
         self._current_thinking_text = ""
-        agent = self.sm.get_current_agent()
-
-        if agent is None:
-            self.call_from_thread(self._add_error_message, "No active session.")
-            return
-
-        if not hasattr(agent, "run_stream_verbose"):
-            self.call_from_thread(
-                self._add_error_message,
-                "Agent does not support stream+verbose mode.",
-            )
-            return
 
         try:
-            for event in agent.run_stream_verbose(user_input):
-                etype = event.get("type")
-                if etype == "thinking_start":
+            for event in self.service.send_message_stream(user_input):
+                if isinstance(event, ThinkingStartEvent):
                     self.call_from_thread(self._start_new_thinking_response)
-                elif etype == "thinking_chunk":
+                elif isinstance(event, ThinkingChunkEvent):
                     self.call_from_thread(
-                        self._append_thinking_chunk, event.get("text", "")
+                        self._append_thinking_chunk, event.text
                     )
-                elif etype == "assistant_start":
+                elif isinstance(event, ThinkingEndEvent):
+                    pass
+                elif isinstance(event, AssistantStartEvent):
                     self.call_from_thread(self._start_new_assistant_response)
-                elif etype == "assistant_chunk":
+                elif isinstance(event, AssistantChunkEvent):
                     self.call_from_thread(
-                        self._append_assistant_chunk, event.get("text", "")
+                        self._append_assistant_chunk, event.text
                     )
-                elif etype == "assistant_end":
+                elif isinstance(event, AssistantEndEvent):
                     self.call_from_thread(self._finish_assistant_response)
-                elif etype == "tool_call":
+                elif isinstance(event, ToolCallEvent):
                     self.call_from_thread(
                         self._add_tool_call,
-                        event.get("name", ""),
-                        event.get("args", {}),
+                        event.name,
+                        event.args,
                     )
-                elif etype == "observation":
+                elif isinstance(event, ObservationEvent):
                     self.call_from_thread(
-                        self._add_observation, event.get("text", "")
+                        self._add_observation, event.text
                     )
-                elif etype == "error":
+                elif isinstance(event, ErrorEvent):
                     self.call_from_thread(
-                        self._add_error_message, event.get("text", "")
+                        self._add_error_message, event.text
                     )
         except Exception as e:
             self.call_from_thread(self._add_error_message, f"Agent error: {e}")

@@ -27,15 +27,6 @@ class ToolParameter:
     default: Any = None
 
 
-@dataclass
-class ToolCall:
-    """LLM 发起的工具调用请求."""
-    
-    id: str
-    name: str
-    arguments: Dict[str, Any]
-
-
 class Tool(ABC):
     """工具抽象基类.
     

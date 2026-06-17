@@ -1,9 +1,9 @@
 """LangGraph ReAct Agent 运行时容器.
 
-彻底合并后：AgentState 是自我管理容量的短期记忆容器，跨轮次保留.
+AgentState 是自我管理容量的短期记忆容器，跨轮次保留.
 - messages 由 LangGraph 的 add_messages reducer 累积，由 LangGraphAgent 管理容量
 - file_snapshots 由 tools_node 动态更新，llm_node 调用前注入
-- ShortTermMemory 作为 AgentState 的容量管理工具，由 LangGraphAgent 显式调用
+- ContextCompressor 作为 AgentState 的容量管理工具，由 LangGraphAgent 显式调用
 """
 
 import os
@@ -36,6 +36,7 @@ from ai_coding.agent.nodes import (
 from ai_coding.agent.state import AgentState
 from ai_coding.logger import get_logger
 from ai_coding.agent.context_compressor import ContextCompressor
+from ai_coding.prompts import PromptContext, SystemPromptBuilder
 from ai_coding.tools.base import Tool, ToolRegistry
 
 logger = get_logger(__name__)
@@ -65,6 +66,8 @@ class LangGraphAgent:
         max_iterations: int = 10,
         streaming: bool = True,
         system_prompt: Optional[str] = None,
+        prompt_context: Optional[PromptContext] = None,
+        system_prompt_builder: Optional[SystemPromptBuilder] = None,
         thread_id: Optional[str] = None,
         enable_short_term_memory: bool = True,
         short_term_memory_budget: int = 100000,
@@ -84,7 +87,8 @@ class LangGraphAgent:
         self.tools = tools or []
         self.max_iterations = max_iterations
         self.streaming = streaming
-        self.system_prompt = system_prompt or self._build_system_prompt()
+        self.prompt_context = prompt_context
+        self.system_prompt = system_prompt or self._build_system_prompt(system_prompt_builder)
         self.thread_id = thread_id or uuid.uuid4().hex[:8]
         self.auto_approve = auto_approve
         self.work_dir = work_dir or str(Path.cwd())
@@ -153,6 +157,7 @@ class LangGraphAgent:
         builder.add_node("approval", create_approval_gate(
             tool_registry=self.tool_registry,
             interactive=not self.auto_approve,
+            event_loop=self.event_loop,
             on_approval_request=self.on_approval_request,
             register_approval_future=self.register_approval_future,
         ))
@@ -597,32 +602,13 @@ class LangGraphAgent:
                 result.append({"role": "system", "content": msg.content or ""})
         return result
 
-    def _build_system_prompt(self) -> str:
-        """从包内资源读取默认系统提示模板，并动态插入工具描述."""
-        from importlib.resources import files
-
-        try:
-            prompt_path = files("ai_coding.prompts").joinpath("default_system_prompt.txt")
-            template = prompt_path.read_text(encoding="utf-8")
-        except Exception as e:
-            logger.warning(f"读取默认系统提示失败: {e}，使用兜底提示")
-            template = (
-                "你是一个 AI 编程助手，专门帮助用户进行代码开发任务。\n"
-                "你可以使用以下工具来完成任务:\n{tools_text}\n\n"
-                "工作原则:\n"
-                "1. 如果任务需要查看或操作文件，请先使用相应工具。\n"
-                "2. 如果任务可以通过直接回答完成，请不要调用工具。\n"
-                "3. 每次回复尽量简洁、准确。\n"
-                "4. 执行命令时请注意安全性。\n"
-            )
-
-        tool_descriptions = []
-        for tool in self.tools:
-            params = ", ".join(p.name for p in tool.parameters)
-            tool_descriptions.append(f"  - {tool.name}({params}): {tool.description}")
-        tools_text = "\n".join(tool_descriptions) if tool_descriptions else "  (暂无可用工具)"
-
-        return template.format(tools_text=tools_text)
+    def _build_system_prompt(
+        self, builder: Optional[SystemPromptBuilder] = None
+    ) -> str:
+        """使用 SystemPromptBuilder 构建 system prompt."""
+        if builder is None:
+            builder = SystemPromptBuilder()
+        return builder.build(self.prompt_context)
 
     def get_context_usage(self) -> dict:
         """计算当前会话的上下文窗口使用率.

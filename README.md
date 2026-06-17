@@ -135,11 +135,13 @@ python scripts/run_single.py --task abs-module-cache-flags --prompt prompts/v2.t
 | 命令 | 功能 |
 |------|------|
 | `/help` | 显示帮助信息 |
-| `/tools` | 列出可用工具 |
+| `/prompt` | 显示当前系统提示 |
 | `/history` | 查看对话历史 |
-| `/new` | 开启新会话（清空历史） |
-| `/verbose` | 切换详细模式 |
-| `/stream` | 切换流式输出模式 |
+| `/session list` | 列出所有会话 |
+| `/session switch ID` | 切换会话 |
+| `/session rm ID` | 删除会话 |
+| `/session rename ID NAME` | 重命名会话 |
+| `/new` | 创建新会话 |
 | `/clear` | 清屏 |
 | `/exit` | 退出程序 |
 
@@ -148,28 +150,41 @@ python scripts/run_single.py --task abs-module-cache-flags --prompt prompts/v2.t
 ```
 ai-coding/
 ├── logs/                   # 自动生成的日志文件
+├── data/                   # 会话持久化数据
+├── scripts/                # 评估与辅助脚本
+├── tests/                  # 单元测试
 ├── src/
 │   └── ai_coding/
 │       ├── __init__.py     # 包入口
 │       ├── __main__.py     # python -m ai_coding
-│       ├── main.py         # 程序入口
+│       ├── cli.py          # 命令行入口
 │       ├── config.py       # 环境变量配置
 │       ├── logger.py       # 日志系统
 │       ├── mock_llm.py     # Mock LLM（离线测试）
 │       ├── agent/          # Agent 核心
 │       │   ├── core.py         # LangGraph ReAct Agent 运行时
+│       │   ├── service.py      # Agent 统一服务接口
+│       │   ├── events.py       # 标准事件类型
 │       │   ├── session.py      # 多会话管理
 │       │   ├── state.py        # AgentState 定义
 │       │   ├── context_compressor.py  # 上下文压缩
+│       │   ├── sub_agent_manager.py   # 子 Agent 管理
 │       │   └── nodes/          # 图节点（llm、tools、approval、edges）
 │       ├── llm/            # LLM 封装
 │       │   ├── kimi_chat.py    # KimiChatOpenAI（支持 reasoning_content）
 │       │   └── lc_llm.py       # LLM 工厂（Kimi/OpenAI/Mock）
+│       ├── persistence/    # 持久化存储
+│       │   ├── storage.py      # 存储引擎
+│       │   ├── serializer.py   # 状态序列化
+│       │   └── config.py       # 存储配置
+│       ├── prompts/        # 系统提示模板
 │       └── tools/          # 工具系统
 │           ├── base.py         # Tool / ToolRegistry
 │           ├── file_tools.py   # 文件操作（read/write/edit/grep/glob/list_dir）
 │           ├── shell_tools.py  # Shell 命令执行（含后台任务）
 │           ├── task_tools.py   # 后台任务管理（task_list/output/stop）
+│           ├── plan_tools.py   # Plan 模式工具
+│           ├── collaboration_tools.py  # 协作工具
 │           └── todo_tool.py    # 任务列表
 ├── .env                    # 环境变量（API Key 等）
 ├── .env.example            # 环境变量模板

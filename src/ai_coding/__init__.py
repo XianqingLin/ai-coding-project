@@ -6,8 +6,8 @@
 Example:
     >>> from ai_coding.agent import LangGraphAgent
     >>> from ai_coding.llm import create_lc_llm
-    >>> from ai_coding.tools import DEFAULT_TOOLS
-    >>> agent = LangGraphAgent(llm=create_lc_llm("kimi"), tools=DEFAULT_TOOLS)
+    >>> from ai_coding.tools import create_default_tools
+    >>> agent = LangGraphAgent(llm=create_lc_llm("kimi"), tools=create_default_tools())
     >>> result = agent.run("帮我查看 README.md")
     >>> print(result)
 

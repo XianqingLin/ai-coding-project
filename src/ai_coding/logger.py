@@ -8,20 +8,24 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from ai_coding.config import LOG_LEVEL
+
 
 def setup_logging(
-    level: str = "INFO",
+    level: Optional[str] = None,
     log_file: Optional[str] = None,
     log_dir: str = "logs",
 ) -> None:
     """配置全局日志系统.
     
     Args:
-        level: 日志级别 (DEBUG/INFO/WARNING/ERROR).
+        level: 日志级别 (DEBUG/INFO/WARNING/ERROR)，默认使用 config.LOG_LEVEL.
         log_file: 日志文件名, 默认按日期生成.
         log_dir: 日志文件存放目录.
     
     """
+    if level is None:
+        level = LOG_LEVEL
     # 确保日志目录存在
     log_path = Path(log_dir)
     log_path.mkdir(parents=True, exist_ok=True)

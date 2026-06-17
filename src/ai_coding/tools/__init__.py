@@ -3,7 +3,7 @@
 提供 AI Coding 助手可用的所有工具.
 """
 
-from ai_coding.tools.base import Tool, ToolParameter, ToolCall, ToolRegistry
+from ai_coding.tools.base import Tool, ToolParameter, ToolRegistry
 from ai_coding.tools.file_tools import (
     ReadFileTool,
     WriteFileTool,
@@ -41,14 +41,10 @@ def create_default_tools() -> list:
     ]
 
 
-# 保留旧常量名，指向一组新建实例，便于兼容旧代码；
-# 推荐在新代码中调用 create_default_tools() 以获得隔离实例。
-DEFAULT_TOOLS = create_default_tools()
-
 __all__ = [
     "Tool",
     "ToolParameter",
-    "ToolCall",
+
     "ToolRegistry",
     "ReadFileTool",
     "WriteFileTool",
@@ -66,5 +62,4 @@ __all__ = [
     "AskUserQuestionTool",
     "AgentTool",
     "create_default_tools",
-    "DEFAULT_TOOLS",
 ]

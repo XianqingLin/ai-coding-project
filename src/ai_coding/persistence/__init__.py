@@ -3,7 +3,7 @@
 提供 AgentState 的序列化、存储引擎和会话恢复能力.
 """
 
-from ai_coding.persistence.config import get_config, get_storage_root
+from ai_coding.persistence.config import get_storage_root
 from ai_coding.persistence.serializer import (
     deserialize_messages,
     deserialize_state,
@@ -23,6 +23,5 @@ __all__ = [
     "deserialize_messages",
     "state_to_json",
     "state_from_json",
-    "get_config",
     "get_storage_root",
 ]

@@ -49,13 +49,14 @@ class MockChatModel:
 
     使用示例:
         >>> from ai_coding.mock_llm import MockChatModel, mock_tool_call, mock_text
+        >>> from ai_coding.tools import create_default_tools
         >>> llm = MockChatModel(responses=[
         ...     mock_tool_call("list_dir", {"path": "."}, content="看看目录结构"),
         ...     mock_tool_call("read_file", {"path": "main.py"}, content="读一下主文件"),
         ...     mock_text("任务完成！"),
         ... ])
         >>> from ai_coding.agent.core import LangGraphAgent
-        >>> agent = LangGraphAgent(llm=llm, tools=DEFAULT_TOOLS)
+        >>> agent = LangGraphAgent(llm=llm, tools=create_default_tools())
         >>> result = agent.run("帮我看看项目")
 
     """

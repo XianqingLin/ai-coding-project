@@ -30,6 +30,7 @@ APPROVAL_TIMEOUT_SECONDS = 300
 def create_approval_gate(
     tool_registry: ToolRegistry,
     interactive: bool = True,
+    event_loop: Optional[Any] = None,
     on_approval_request: Optional[Callable[[Dict[str, Any]], None]] = None,
     register_approval_future: Optional[Callable[[str, Future], None]] = None,
 ):

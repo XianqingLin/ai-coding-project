@@ -12,6 +12,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from ai_coding.agent.core import LangGraphAgent
 from ai_coding.logger import get_logger
+from ai_coding.prompts import PromptContext, SystemPromptBuilder
 from ai_coding.persistence import StorageEngine, state_from_json, state_to_json
 from ai_coding.persistence.storage import _work_dir_key
 from ai_coding.tools import create_default_tools
@@ -52,7 +53,7 @@ class SessionManager:
     """会话管理器.
 
     管理多个并发的 Agent 会话，支持创建、切换、列表、删除.
-    会话元数据和 AgentState 均持久化到 ~/.ai-coding/；
+    会话元数据和 AgentState 均持久化到项目根目录的 data/；
     进程重启后可恢复完整的对话上下文.
 
     Attributes:
@@ -69,6 +70,8 @@ class SessionManager:
         tools: Optional[List] = None,
         tools_factory: Optional[Callable[[], List]] = None,
         system_prompt: Optional[str] = None,
+        prompt_context: Optional[PromptContext] = None,
+        system_prompt_builder: Optional[SystemPromptBuilder] = None,
         auto_approve: bool = False,
         work_dir: Optional[str] = None,
         event_loop: Any = None,
@@ -77,6 +80,8 @@ class SessionManager:
     ) -> None:
         self.llm_factory = llm_factory
         self.system_prompt = system_prompt
+        self.prompt_context = prompt_context
+        self.system_prompt_builder = system_prompt_builder
         self.auto_approve = auto_approve
         self.work_dir = str(Path(work_dir).resolve()) if work_dir else str(Path.cwd().resolve())
         self.event_loop = event_loop
@@ -204,6 +209,8 @@ class SessionManager:
             llm=self.llm_factory(),
             tools=self.tools_factory(),
             system_prompt=self.system_prompt,
+            prompt_context=self.prompt_context,
+            system_prompt_builder=self.system_prompt_builder,
             thread_id=thread_id,
             max_iterations=10,
             streaming=True,

@@ -1,6 +1,6 @@
 """持久化存储引擎.
 
-管理 ~/.ai-coding/ 目录下的会话存储：
+管理 data/ 目录下的会话存储：
 - session_index.jsonl
 - sessions/<workDirKey>/<sessionId>/
   - meta.json
@@ -271,31 +271,3 @@ class StorageEngine:
             logger.warning(f"删除会话数据失败 [{session_id}]: {e}")
             return False
 
-    def cleanup_orphaned(self, valid_session_ids: List[str]) -> int:
-        """清理索引中不存在但磁盘上残留的会话目录.
-
-        Returns:
-            清理的目录数量.
-
-        """
-        import shutil
-        valid_set = set(valid_session_ids)
-        count = 0
-        sessions_root = self.root / "sessions"
-        if not sessions_root.exists():
-            return 0
-        for work_dir_key_dir in sessions_root.iterdir():
-            if not work_dir_key_dir.is_dir():
-                continue
-            for session_dir in work_dir_key_dir.iterdir():
-                if not session_dir.is_dir():
-                    continue
-                sid = session_dir.name
-                if sid not in valid_set:
-                    try:
-                        shutil.rmtree(session_dir)
-                        count += 1
-                        logger.info(f"清理孤儿会话目录: {sid}")
-                    except Exception as e:
-                        logger.warning(f"清理孤儿目录失败 [{sid}]: {e}")
-        return count
