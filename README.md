@@ -177,19 +177,6 @@ README.md 的内容如下：
 >>> 把 README.md 中的 "Python >= 3.10" 改成 "Python >= 3.11"
 ```
 
-### DeepSWE 单任务评估
-
-```bash
-# 运行单个 DeepSWE 任务
-python scripts/run_single.py --task abs-module-cache-flags
-
-# 单步调试模式
-python scripts/run_single.py --task abs-module-cache-flags --step
-
-# 使用自定义提示
-python scripts/run_single.py --task abs-module-cache-flags --prompt prompts/v2.txt
-```
-
 ### 端到端 Demo：让 Agent 给俄罗斯方块加 Hold 功能
 
 下面演示如何让 AI Coding 在真实代码库上完成需求分析、代码修改和测试验证。
