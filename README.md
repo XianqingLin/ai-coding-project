@@ -11,7 +11,7 @@
 
 - 🤖 **ReAct Agent 架构** — AI 能思考、决策、调用工具完成任务
 - ⚡ **流式输出** — AI 回复逐字实时显示，无需等待
-- 🛠️ **工具系统** — 读取/写入/编辑文件、列出目录、执行命令、代码搜索
+- 🛠️ **工具系统** — 读取/写入/编辑文件、列出目录、执行命令、代码搜索、Git 操作
 - 🎨 **语法高亮** — 代码块自动高亮显示
 - 📝 **日志记录** — 自动记录操作日志到 `logs/` 目录
 - 🔌 **多模型支持** — 支持 Kimi (K2.6)、OpenAI、Mock 模式
@@ -32,7 +32,7 @@ graph TD
     LangGraphAgent --> ToolsNode[tools_node]
     LangGraphAgent --> ApprovalNode[approval_node]
     LLMNode --> LLMFactory[LLM 工厂<br/>Kimi / OpenAI / Mock]
-    ToolsNode --> ToolRegistry[ToolRegistry<br/>文件 / Shell / Grep / 子Agent]
+    ToolsNode --> ToolRegistry[ToolRegistry<br/>文件 / Shell / Grep / Git / 子Agent]
     ApprovalNode --> UserApproval[用户审批]
     ToolsNode --> Storage[StorageEngine<br/>状态持久化]
     LangGraphAgent --> Compressor[ContextCompressor<br/>上下文压缩]
@@ -61,7 +61,7 @@ stateDiagram-v2
 | **AgentService** | `agent/service.py` | 对外统一服务接口，管理会话、消息、状态 |
 | **LangGraphAgent** | `agent/core.py` | 构建并运行 ReAct 状态图，协调 LLM、工具、审批节点 |
 | **图节点** | `agent/nodes/` | `llm_node` 调用模型，`tools_node` 执行工具，`approval_node` 进行权限审批 |
-| **工具系统** | `tools/` | 文件读写、Shell 执行、代码搜索、子 Agent 委派等 |
+| **工具系统** | `tools/` | 文件读写、Shell 执行、代码搜索、Git 操作、子 Agent 委派等 |
 | **LLM 工厂** | `llm/` | 封装 Kimi / OpenAI / Mock 三种模型 provider |
 | **持久化** | `persistence/` | AgentState、消息历史、执行记录的序列化与存储 |
 | **上下文压缩** | `agent/context_compressor.py` | 长对话时自动压缩上下文，控制 Token 开销 |

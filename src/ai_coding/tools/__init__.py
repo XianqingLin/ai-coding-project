@@ -13,6 +13,17 @@ from ai_coding.tools.file_tools import (
     ReadFileTool,
     WriteFileTool,
 )
+from ai_coding.tools.git_tools import (
+    GitAddTool,
+    GitBranchCreateTool,
+    GitBranchListTool,
+    GitBranchSwitchTool,
+    GitCommitTool,
+    GitDiffTool,
+    GitLogTool,
+    GitPushTool,
+    GitStatusTool,
+)
 from ai_coding.tools.plan_tools import EnterPlanModeTool, ExitPlanModeTool
 from ai_coding.tools.shell_tools import ExecuteCommandTool
 from ai_coding.tools.task_tools import TaskListTool, TaskOutputTool, TaskStopTool
@@ -29,6 +40,15 @@ def create_default_tools() -> list:
         ListDirTool(),
         GrepTool(),
         GlobTool(),
+        GitStatusTool(),
+        GitDiffTool(),
+        GitLogTool(),
+        GitBranchListTool(),
+        GitBranchCreateTool(),
+        GitBranchSwitchTool(),
+        GitAddTool(),
+        GitCommitTool(),
+        GitPushTool(),
         EnterPlanModeTool(),
         ExitPlanModeTool(),
         AskUserQuestionTool(),
@@ -60,5 +80,14 @@ __all__ = [
     "ExitPlanModeTool",
     "AskUserQuestionTool",
     "AgentTool",
+    "GitStatusTool",
+    "GitDiffTool",
+    "GitLogTool",
+    "GitBranchListTool",
+    "GitBranchCreateTool",
+    "GitBranchSwitchTool",
+    "GitAddTool",
+    "GitCommitTool",
+    "GitPushTool",
     "create_default_tools",
 ]
