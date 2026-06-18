@@ -28,8 +28,20 @@ class ReadFileTool(Tool):
     def parameters(self) -> List[ToolParameter]:
         return [
             ToolParameter("path", "string", "要读取的文件路径（相对路径或绝对路径）"),
-            ToolParameter("line_offset", "integer", "起始行号(从1开始), 默认1", required=False, default=1),
-            ToolParameter("n_lines", "integer", "读取行数, 默认300, 最大300", required=False, default=300),
+            ToolParameter(
+                "line_offset",
+                "integer",
+                "起始行号(从1开始), 默认1",
+                required=False,
+                default=1,
+            ),
+            ToolParameter(
+                "n_lines",
+                "integer",
+                "读取行数, 默认300, 最大300",
+                required=False,
+                default=300,
+            ),
         ]
 
     def execute(self, path: str, line_offset: int = 1, n_lines: int = 300) -> str:
@@ -66,13 +78,16 @@ class ReadFileTool(Tool):
                 truncated_lines.append(line)
 
             numbered = "\n".join(
-                f"{start_idx + i + 1:4d} | {line}" for i, line in enumerate(truncated_lines)
+                f"{start_idx + i + 1:4d} | {line}"
+                for i, line in enumerate(truncated_lines)
             )
 
             result = f"文件: {path}\n{'='*50}\n{numbered}\n{'='*50}\n"
-            result += f"(本段 {start_idx + 1}-{min(end_idx, total_lines)} / 共 {total_lines} 行"
+            segment_range = f"{start_idx + 1}-{min(end_idx, total_lines)}"
+            result += f"(本段 {segment_range} / 共 {total_lines} 行"
             if total_lines > 1000:
-                result += f", 超过 1000 行, 可用 line_offset={min(end_idx + 1, total_lines)} 继续读取"
+                next_offset = min(end_idx + 1, total_lines)
+                result += f", 超过 1000 行, 可用 line_offset={next_offset} 继续读取"
             result += ")"
             return result
 
@@ -135,7 +150,9 @@ class EditFile(Tool):
     def parameters(self) -> List[ToolParameter]:
         return [
             ToolParameter("path", "string", "要编辑的文件路径"),
-            ToolParameter("old_string", "string", "要被替换的旧内容（必须在文件中唯一出现）"),
+            ToolParameter(
+                "old_string", "string", "要被替换的旧内容（必须在文件中唯一出现）"
+            ),
             ToolParameter("new_string", "string", "用于替换的新内容"),
         ]
 
@@ -159,7 +176,7 @@ class EditFile(Tool):
         best_ratio = 0.0
 
         for i in range(len(content_lines) - old_len + 1):
-            candidate = "\n".join(content_lines[i:i + old_len])
+            candidate = "\n".join(content_lines[i : i + old_len])
             ratio = difflib.SequenceMatcher(None, old_string, candidate).ratio()
             if ratio > best_ratio:
                 best_ratio = ratio
@@ -169,7 +186,7 @@ class EditFile(Tool):
             if window <= 0:
                 continue
             for i in range(len(content_lines) - window + 1):
-                candidate = "\n".join(content_lines[i:i + window])
+                candidate = "\n".join(content_lines[i : i + window])
                 ratio = difflib.SequenceMatcher(None, old_string, candidate).ratio()
                 if ratio > best_ratio:
                     best_ratio = ratio
@@ -240,18 +257,43 @@ class GrepTool(Tool):
     )
 
     DEFAULT_EXCLUDE_DIRS = {
-        ".git", ".github", "node_modules", "vendor",
-        "__pycache__", ".venv", "venv", ".tox",
-        "build", "dist", ".pytest_cache", ".mypy_cache",
+        ".git",
+        ".github",
+        "node_modules",
+        "vendor",
+        "__pycache__",
+        ".venv",
+        "venv",
+        ".tox",
+        "build",
+        "dist",
+        ".pytest_cache",
+        ".mypy_cache",
         "target",
     }
 
     DEFAULT_EXCLUDE_GLOBS = {
-        "*.min.js", "*.min.css", "*.map",
-        "*.png", "*.jpg", "*.jpeg", "*.gif", "*.ico",
-        "*.pdf", "*.zip", "*.tar", "*.gz", "*.rar",
-        "*.exe", "*.dll", "*.so", "*.dylib",
-        "*.wasm", "*.woff", "*.woff2", "*.ttf",
+        "*.min.js",
+        "*.min.css",
+        "*.map",
+        "*.png",
+        "*.jpg",
+        "*.jpeg",
+        "*.gif",
+        "*.ico",
+        "*.pdf",
+        "*.zip",
+        "*.tar",
+        "*.gz",
+        "*.rar",
+        "*.exe",
+        "*.dll",
+        "*.so",
+        "*.dylib",
+        "*.wasm",
+        "*.woff",
+        "*.woff2",
+        "*.ttf",
     }
 
     MAX_RESULTS = 50
@@ -261,12 +303,28 @@ class GrepTool(Tool):
     def parameters(self) -> List[ToolParameter]:
         return [
             ToolParameter("pattern", "string", "搜索模式(Python 正则表达式)"),
-            ToolParameter("path", "string", "搜索路径, 默认当前目录", required=False, default="."),
-            ToolParameter("glob", "string", "文件过滤器, 如 '*.go' 或 '*.{py,js}'", required=False),
-            ToolParameter("output_mode", "string", "content(显示匹配行) 或 files(只显示文件列表)", required=False, default="content"),
+            ToolParameter(
+                "path", "string", "搜索路径, 默认当前目录", required=False, default="."
+            ),
+            ToolParameter(
+                "glob", "string", "文件过滤器, 如 '*.go' 或 '*.{py,js}'", required=False
+            ),
+            ToolParameter(
+                "output_mode",
+                "string",
+                "content(显示匹配行) 或 files(只显示文件列表)",
+                required=False,
+                default="content",
+            ),
         ]
 
-    def execute(self, pattern: str, path: str = ".", glob: str = None, output_mode: str = "content") -> str:
+    def execute(
+        self,
+        pattern: str,
+        path: str = ".",
+        glob: str = None,
+        output_mode: str = "content",
+    ) -> str:
         try:
             target = self._resolve_path(path, must_exist=True)
         except Exception as e:
@@ -290,13 +348,15 @@ class GrepTool(Tool):
 
         for root, dirs, files in os.walk(path):
             dirs[:] = [
-                d for d in dirs
-                if d not in self.DEFAULT_EXCLUDE_DIRS
-                and not d.startswith(".")
+                d
+                for d in dirs
+                if d not in self.DEFAULT_EXCLUDE_DIRS and not d.startswith(".")
             ]
 
             for filename in files:
-                if any(fnmatch.fnmatch(filename, g) for g in self.DEFAULT_EXCLUDE_GLOBS):
+                if any(
+                    fnmatch.fnmatch(filename, g) for g in self.DEFAULT_EXCLUDE_GLOBS
+                ):
                     continue
                 if filename.startswith("."):
                     continue
@@ -316,8 +376,9 @@ class GrepTool(Tool):
                     if len(results) >= self.MAX_RESULTS:
                         break
 
-            if (output_mode == "files" and len(files_matched) >= self.MAX_RESULTS) or \
-               (output_mode != "files" and len(results) >= self.MAX_RESULTS):
+            if (output_mode == "files" and len(files_matched) >= self.MAX_RESULTS) or (
+                output_mode != "files" and len(results) >= self.MAX_RESULTS
+            ):
                 break
 
         if output_mode == "files":
@@ -325,21 +386,25 @@ class GrepTool(Tool):
                 return f"未找到匹配文件 (pattern={pattern!r})"
             lines = sorted(f.replace(os.sep, "/") for f in files_matched)
             if len(lines) >= self.MAX_RESULTS:
-                lines.append(f"... 结果超过 {self.MAX_RESULTS} 条, 已截断。请缩小搜索范围。")
+                lines.append(
+                    f"... 结果超过 {self.MAX_RESULTS} 条, 已截断。请缩小搜索范围。"
+                )
             return "匹配文件:\n" + "\n".join(lines)
 
         if not results:
             return f"未找到匹配 (pattern={pattern!r})"
 
         lines = []
-        for filepath, line_no, line_text in results[:self.MAX_RESULTS]:
+        for filepath, line_no, line_text in results[: self.MAX_RESULTS]:
             rel_path = os.path.relpath(filepath, path).replace(os.sep, "/")
             if len(line_text) > self.MAX_LINE_LEN:
-                line_text = line_text[:self.MAX_LINE_LEN] + " ..."
+                line_text = line_text[: self.MAX_LINE_LEN] + " ..."
             lines.append(f"{rel_path}:{line_no} | {line_text}")
 
         if len(results) >= self.MAX_RESULTS:
-            lines.append(f"... 结果超过 {self.MAX_RESULTS} 条, 已截断。请缩小 pattern 或加 glob 过滤。")
+            lines.append(
+                f"... 结果超过 {self.MAX_RESULTS} 条, 已截断。请缩小 pattern 或加 glob 过滤。"
+            )
 
         return "\n".join(lines)
 
@@ -365,11 +430,13 @@ class GrepTool(Tool):
         lines = []
         for _, line_no, line_text in results:
             if len(line_text) > self.MAX_LINE_LEN:
-                line_text = line_text[:self.MAX_LINE_LEN] + " ..."
+                line_text = line_text[: self.MAX_LINE_LEN] + " ..."
             lines.append(f"{filepath.replace(os.sep, '/' )}:{line_no} | {line_text}")
         return "\n".join(lines)
 
-    def _search_file_lines(self, filepath: str, regex: re.Pattern, output_mode: str) -> List:
+    def _search_file_lines(
+        self, filepath: str, regex: re.Pattern, output_mode: str
+    ) -> List:
         results = []
         try:
             with open(filepath, "r", encoding="utf-8", errors="replace") as f:
@@ -387,12 +454,20 @@ class ListDirTool(Tool):
     """列出目录内容."""
 
     name = "list_dir"
-    description = "列出指定目录下的文件和子目录. 用于了解项目结构或查看某个目录中包含的文件."
+    description = (
+        "列出指定目录下的文件和子目录. 用于了解项目结构或查看某个目录中包含的文件."
+    )
 
     @property
     def parameters(self) -> List[ToolParameter]:
         return [
-            ToolParameter("path", "string", "要列出的目录路径, 默认为当前目录", required=False, default="."),
+            ToolParameter(
+                "path",
+                "string",
+                "要列出的目录路径, 默认为当前目录",
+                required=False,
+                default=".",
+            ),
         ]
 
     def execute(self, path: str = ".") -> str:
@@ -455,8 +530,16 @@ class GlobTool(Tool):
     @property
     def parameters(self) -> List[ToolParameter]:
         return [
-            ToolParameter("pattern", "string", "glob 匹配模式，如 '*.py' 或 'src/**/*.js'"),
-            ToolParameter("path", "string", "搜索起始目录，默认当前目录", required=False, default="."),
+            ToolParameter(
+                "pattern", "string", "glob 匹配模式，如 '*.py' 或 'src/**/*.js'"
+            ),
+            ToolParameter(
+                "path",
+                "string",
+                "搜索起始目录，默认当前目录",
+                required=False,
+                default=".",
+            ),
         ]
 
     def execute(self, pattern: str, path: str = ".") -> str:
@@ -516,7 +599,7 @@ class GlobTool(Tool):
 
         truncated = False
         if len(files_with_mtime) > self.MAX_RESULTS:
-            files_with_mtime = files_with_mtime[:self.MAX_RESULTS]
+            files_with_mtime = files_with_mtime[: self.MAX_RESULTS]
             truncated = True
 
         lines = []
@@ -526,6 +609,8 @@ class GlobTool(Tool):
             lines.append(f"{rel}  ({time_str})")
 
         if truncated:
-            lines.append(f"... 结果超过 {self.MAX_RESULTS} 条，已截断。请缩小 pattern 范围。")
+            lines.append(
+                f"... 结果超过 {self.MAX_RESULTS} 条，已截断。请缩小 pattern 范围。"
+            )
 
         return f"匹配文件 ({len(files_with_mtime)} 个):\n" + "\n".join(lines)

@@ -114,7 +114,11 @@ class SubAgentManager:
         """
         if instance_id and instance_id in self._agents:
             return self._resume_instance(
-                instance_id, prompt, llm, llm_factory, run_in_background,
+                instance_id,
+                prompt,
+                llm,
+                llm_factory,
+                run_in_background,
                 event_loop=event_loop,
                 on_approval_request=on_approval_request,
                 on_edit_proposal=on_edit_proposal,
@@ -131,6 +135,7 @@ class SubAgentManager:
 
         # 延迟导入避免循环依赖
         from ai_coding.agent.core import LangGraphAgent
+
         agent = LangGraphAgent(
             llm=sub_llm,
             tools=tools,
@@ -181,8 +186,12 @@ class SubAgentManager:
         if thread.is_alive():
             with self._lock:
                 self._agents[sid].status = "failed"
-                self._agents[sid].result = f"[错误] 子 Agent 执行超时（{SUB_AGENT_SYNC_TIMEOUT // 60} 分钟）"
-            logger.warning(f"[SubAgent] {sid} 执行超时（{SUB_AGENT_SYNC_TIMEOUT // 60} 分钟）")
+                self._agents[sid].result = (
+                    f"[错误] 子 Agent 执行超时（{SUB_AGENT_SYNC_TIMEOUT // 60} 分钟）"
+                )
+            logger.warning(
+                f"[SubAgent] {sid} 执行超时（{SUB_AGENT_SYNC_TIMEOUT // 60} 分钟）"
+            )
 
         with self._lock:
             inst = self._agents[sid]
@@ -209,7 +218,9 @@ class SubAgentManager:
             self._agents[instance_id].result = result
             self._agents[instance_id].completed_at = time.time()
 
-        logger.info(f"[SubAgent] {instance_id} 完成 | 状态={status} | 结果长度={len(result)}")
+        logger.info(
+            f"[SubAgent] {instance_id} 完成 | 状态={status} | 结果长度={len(result)}"
+        )
 
     def _resume_instance(
         self,
@@ -246,6 +257,7 @@ class SubAgentManager:
         new_llm = llm_factory() if llm_factory else llm
         if new_llm and new_llm is not instance.agent.llm:
             from ai_coding.agent.core import LangGraphAgent
+
             old_state = instance.agent.state
             new_agent = LangGraphAgent(
                 llm=new_llm,
@@ -267,6 +279,7 @@ class SubAgentManager:
         # 追加新任务到子 Agent 的 state
         if instance.agent.state is not None:
             from langchain_core.messages import HumanMessage
+
             messages = list(instance.agent.state.get("messages", []))
             messages.append(HumanMessage(content=prompt))
             instance.agent.state["messages"] = messages
@@ -295,8 +308,12 @@ class SubAgentManager:
         if thread.is_alive():
             with self._lock:
                 self._agents[instance_id].status = "failed"
-                self._agents[instance_id].result = f"[错误] 子 Agent 执行超时（{SUB_AGENT_SYNC_TIMEOUT // 60} 分钟）"
-            logger.warning(f"[SubAgent] {instance_id} 执行超时（{SUB_AGENT_SYNC_TIMEOUT // 60} 分钟）")
+                self._agents[instance_id].result = (
+                    f"[错误] 子 Agent 执行超时（{SUB_AGENT_SYNC_TIMEOUT // 60} 分钟）"
+                )
+            logger.warning(
+                f"[SubAgent] {instance_id} 执行超时（{SUB_AGENT_SYNC_TIMEOUT // 60} 分钟）"
+            )
 
         return instance.result
 
@@ -317,7 +334,8 @@ class SubAgentManager:
         """获取已完成但未通知主 Agent 的实例列表."""
         with self._lock:
             return [
-                i for i in self._agents.values()
+                i
+                for i in self._agents.values()
                 if i.status in ("completed", "failed") and not i.notified
             ]
 
@@ -344,6 +362,7 @@ class SubAgentManager:
     def _get_tools_for_type(agent_type: str) -> List[Tool]:
         """根据类型返回可用工具列表."""
         from ai_coding.tools import create_default_tools
+
         tools = create_default_tools()
         tool_names = _SUB_AGENT_TOOL_SETS.get(agent_type)
         if tool_names is None:

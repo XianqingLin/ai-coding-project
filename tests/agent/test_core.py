@@ -1,6 +1,5 @@
 """LangGraphAgent 核心单元测试."""
 
-import pytest
 from langchain_core.messages import AIMessage
 
 from ai_coding.agent.core import LangGraphAgent
@@ -20,10 +19,14 @@ class TestLangGraphAgent:
 
     def test_run_react_loop_with_tool(self):
         """测试完整的 ReAct 循环：用户输入 -> AI 调用 list_dir -> AI 最终回复."""
-        llm = MockChatModel(responses=[
-            mock_tool_call("list_dir", {"path": "."}, content="看看目录", call_id="tc1"),
-            mock_text("我已完成目录查看。"),
-        ])
+        llm = MockChatModel(
+            responses=[
+                mock_tool_call(
+                    "list_dir", {"path": "."}, content="看看目录", call_id="tc1"
+                ),
+                mock_text("我已完成目录查看。"),
+            ]
+        )
         # 只给 list_dir 工具，避免 approval 阻塞
         tools = [t for t in create_default_tools() if t.name in ("list_dir",)]
         agent = LangGraphAgent(llm=llm, tools=tools, auto_approve=True)
@@ -60,5 +63,7 @@ class TestLangGraphAgent:
         agent.run("hi")
 
         history = agent.get_history()
-        assert any(h.get("role") == "user" and h.get("content") == "hi" for h in history)
+        assert any(
+            h.get("role") == "user" and h.get("content") == "hi" for h in history
+        )
         assert any(h.get("role") == "assistant" for h in history)

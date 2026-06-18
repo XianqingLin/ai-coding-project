@@ -64,4 +64,8 @@ class TestBackgroundTasks:
 
         stop_result = stop_tool.execute(task_id=task_id)
         # 任务可能已自然完成，也可能被主动停止；两种状态都接受
-        assert "[停止]" in stop_result or "completed" in stop_result or "已处于终止状态" in stop_result
+        assert (
+            "[停止]" in stop_result
+            or "completed" in stop_result
+            or "已处于终止状态" in stop_result
+        )

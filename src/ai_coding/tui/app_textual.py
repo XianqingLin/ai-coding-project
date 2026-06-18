@@ -15,7 +15,7 @@ from rich.markdown import Markdown as RichMarkdown
 from rich.panel import Panel
 from textual.app import App, ComposeResult
 from textual.containers import VerticalScroll
-from textual.widgets import Input, Static, Collapsible
+from textual.widgets import Collapsible, Input, Static
 
 from ai_coding.agent import AgentService
 from ai_coding.agent.events import (
@@ -188,9 +188,7 @@ class AICodingApp(App):
             pct = usage.get("percentage", 0.0)
             used = usage.get("used_tokens", 0)
             limit = usage.get("limit_tokens", 0)
-            context_info = (
-                f"context: {pct}% ({used / 1000:.1f}k/{limit / 1000:.1f}k)"
-            )
+            context_info = f"context: {pct}% ({used / 1000:.1f}k/{limit / 1000:.1f}k)"
         except Exception:
             pass
 
@@ -586,17 +584,13 @@ class AICodingApp(App):
                 if isinstance(event, ThinkingStartEvent):
                     self.call_from_thread(self._start_new_thinking_response)
                 elif isinstance(event, ThinkingChunkEvent):
-                    self.call_from_thread(
-                        self._append_thinking_chunk, event.text
-                    )
+                    self.call_from_thread(self._append_thinking_chunk, event.text)
                 elif isinstance(event, ThinkingEndEvent):
                     pass
                 elif isinstance(event, AssistantStartEvent):
                     self.call_from_thread(self._start_new_assistant_response)
                 elif isinstance(event, AssistantChunkEvent):
-                    self.call_from_thread(
-                        self._append_assistant_chunk, event.text
-                    )
+                    self.call_from_thread(self._append_assistant_chunk, event.text)
                 elif isinstance(event, AssistantEndEvent):
                     self.call_from_thread(self._finish_assistant_response)
                 elif isinstance(event, ToolCallEvent):
@@ -606,12 +600,8 @@ class AICodingApp(App):
                         event.args,
                     )
                 elif isinstance(event, ObservationEvent):
-                    self.call_from_thread(
-                        self._add_observation, event.text
-                    )
+                    self.call_from_thread(self._add_observation, event.text)
                 elif isinstance(event, ErrorEvent):
-                    self.call_from_thread(
-                        self._add_error_message, event.text
-                    )
+                    self.call_from_thread(self._add_error_message, event.text)
         except Exception as e:
             self.call_from_thread(self._add_error_message, f"Agent error: {e}")

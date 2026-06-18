@@ -27,6 +27,7 @@ from langchain_core.messages import (
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
+from ai_coding.agent.context_compressor import ContextCompressor
 from ai_coding.agent.nodes import (
     create_approval_gate,
     create_llm_node,
@@ -35,7 +36,6 @@ from ai_coding.agent.nodes import (
 )
 from ai_coding.agent.state import AgentState
 from ai_coding.logger import get_logger
-from ai_coding.agent.context_compressor import ContextCompressor
 from ai_coding.prompts import PromptContext, SystemPromptBuilder
 from ai_coding.tools.base import Tool, ToolRegistry
 
@@ -88,7 +88,9 @@ class LangGraphAgent:
         self.max_iterations = max_iterations
         self.streaming = streaming
         self.prompt_context = prompt_context
-        self.system_prompt = system_prompt or self._build_system_prompt(system_prompt_builder)
+        self.system_prompt = system_prompt or self._build_system_prompt(
+            system_prompt_builder
+        )
         self.thread_id = thread_id or uuid.uuid4().hex[:8]
         self.auto_approve = auto_approve
         self.work_dir = work_dir or str(Path.cwd())
@@ -120,10 +122,14 @@ class LangGraphAgent:
             if hasattr(tool, "set_llm") and callable(getattr(tool, "set_llm")):
                 tool.set_llm(self.llm, self.llm_factory)
             # 注入工作目录沙箱
-            if hasattr(tool, "set_work_dir") and callable(getattr(tool, "set_work_dir")):
+            if hasattr(tool, "set_work_dir") and callable(
+                getattr(tool, "set_work_dir")
+            ):
                 tool.set_work_dir(self.work_dir)
             # 子 Agent 工具继承父 Agent 的回调上下文
-            if hasattr(tool, "set_parent_context") and callable(getattr(tool, "set_parent_context")):
+            if hasattr(tool, "set_parent_context") and callable(
+                getattr(tool, "set_parent_context")
+            ):
                 tool.set_parent_context(
                     event_loop=self.event_loop,
                     on_approval_request=self.on_approval_request,
@@ -154,13 +160,16 @@ class LangGraphAgent:
 
         builder = StateGraph(AgentState)
         builder.add_node("llm", create_llm_node(llm=bound_llm))
-        builder.add_node("approval", create_approval_gate(
-            tool_registry=self.tool_registry,
-            interactive=not self.auto_approve,
-            event_loop=self.event_loop,
-            on_approval_request=self.on_approval_request,
-            register_approval_future=self.register_approval_future,
-        ))
+        builder.add_node(
+            "approval",
+            create_approval_gate(
+                tool_registry=self.tool_registry,
+                interactive=not self.auto_approve,
+                event_loop=self.event_loop,
+                on_approval_request=self.on_approval_request,
+                register_approval_future=self.register_approval_future,
+            ),
+        )
         builder.add_node(
             "tools",
             create_tools_node(
@@ -202,7 +211,16 @@ class LangGraphAgent:
             if self.system_prompt:
                 messages.append(SystemMessage(content=self.system_prompt))
             messages.append(HumanMessage(content=user_input))
-            return {"messages": messages, "file_snapshots": {}, "todos": [], "globally_approved_tools": [], "background_tasks": [], "plan_mode": False, "plan_file_path": "", "sub_agents": []}
+            return {
+                "messages": messages,
+                "file_snapshots": {},
+                "todos": [],
+                "globally_approved_tools": [],
+                "background_tasks": [],
+                "plan_mode": False,
+                "plan_file_path": "",
+                "sub_agents": [],
+            }
 
         # 复制现有历史并追加用户输入
         messages = list(self.state["messages"]) + [HumanMessage(content=user_input)]
@@ -210,7 +228,9 @@ class LangGraphAgent:
             "messages": messages,
             "file_snapshots": dict(self.state.get("file_snapshots", {})),
             "todos": [dict(t) for t in self.state.get("todos", [])],
-            "globally_approved_tools": list(self.state.get("globally_approved_tools", [])),
+            "globally_approved_tools": list(
+                self.state.get("globally_approved_tools", [])
+            ),
             "background_tasks": list(self.state.get("background_tasks", [])),
             "plan_mode": bool(self.state.get("plan_mode", False)),
             "plan_file_path": str(self.state.get("plan_file_path", "")),
@@ -253,8 +273,8 @@ class LangGraphAgent:
 
         if current_tokens > threshold:
             logger.warning(
-                f"[Compact] 上下文超阈值({current_tokens}/{self.context_compressor.token_budget}), "
-                f"自动触发压缩"
+                f"[Compact] 上下文超阈值({current_tokens}/"
+                f"{self.context_compressor.token_budget}), 自动触发压缩"
             )
             self.compact()
 
@@ -369,9 +389,18 @@ class LangGraphAgent:
         module = type(e).__module__.lower()
         name = type(e).__name__.lower()
         indicators = [
-            "openai", "anthropic", "google", "http", "urllib", "requests",
-            "connectionerror", "timeout", "apierror", "ratelimit",
-            "authenticationerror", "serviceunavailable",
+            "openai",
+            "anthropic",
+            "google",
+            "http",
+            "urllib",
+            "requests",
+            "connectionerror",
+            "timeout",
+            "apierror",
+            "ratelimit",
+            "authenticationerror",
+            "serviceunavailable",
         ]
         combined = f"{module}.{name}"
         err_str = str(e).lower()
@@ -424,10 +453,14 @@ class LangGraphAgent:
                 return "[错误] Agent 未返回任何消息."
 
             last_msg = messages[-1]
-            content = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+            content = (
+                last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+            )
             if content:
                 self._emit_wire_event({"type": "assistant", "text": content})
-            logger.info(f"Agent 完成 | 消息数: {len(messages)} | 输出: {len(content)} 字符")
+            logger.info(
+                f"Agent 完成 | 消息数: {len(messages)} | 输出: {len(content)} 字符"
+            )
             return content
         except Exception as e:
             msg = self._handle_run_exception(e, "run")
@@ -470,7 +503,9 @@ class LangGraphAgent:
                 elif isinstance(final_snapshot, dict):
                     self.state = final_snapshot
                 if self._pending_assistant_text:
-                    self._emit_wire_event({"type": "assistant", "text": self._pending_assistant_text})
+                    self._emit_wire_event(
+                        {"type": "assistant", "text": self._pending_assistant_text}
+                    )
                     self._pending_assistant_text = ""
                 if self.on_state_change:
                     try:
@@ -560,11 +595,13 @@ class LangGraphAgent:
                                     for tc in msg.tool_calls:
                                         tool_name = tc.get("name", "")
                                         tool_args = tc.get("args", {})
-                                        self._emit_wire_event({
-                                            "type": "tool_call",
-                                            "name": tool_name,
-                                            "args": tool_args,
-                                        })
+                                        self._emit_wire_event(
+                                            {
+                                                "type": "tool_call",
+                                                "name": tool_name,
+                                                "args": tool_args,
+                                            }
+                                        )
                                         yield {
                                             "type": "tool_call",
                                             "name": tool_name,
@@ -575,7 +612,9 @@ class LangGraphAgent:
                             for msg in messages:
                                 if isinstance(msg, ToolMessage):
                                     text = msg.content or ""
-                                    self._emit_wire_event({"type": "observation", "text": text})
+                                    self._emit_wire_event(
+                                        {"type": "observation", "text": text}
+                                    )
                                     yield {"type": "observation", "text": text}
 
             # 结束当前阶段
@@ -585,7 +624,9 @@ class LangGraphAgent:
                 yield {"type": "assistant_end"}
 
             if self._pending_assistant_text:
-                self._emit_wire_event({"type": "assistant", "text": self._pending_assistant_text})
+                self._emit_wire_event(
+                    {"type": "assistant", "text": self._pending_assistant_text}
+                )
                 self._pending_assistant_text = ""
 
             # 保存最终状态
@@ -644,11 +685,13 @@ class LangGraphAgent:
                     ]
                 result.append(d)
             elif isinstance(msg, ToolMessage):
-                result.append({
-                    "role": "tool",
-                    "content": msg.content or "",
-                    "tool_call_id": msg.tool_call_id,
-                })
+                result.append(
+                    {
+                        "role": "tool",
+                        "content": msg.content or "",
+                        "tool_call_id": msg.tool_call_id,
+                    }
+                )
             elif isinstance(msg, SystemMessage):
                 result.append({"role": "system", "content": msg.content or ""})
         return result
@@ -667,11 +710,19 @@ class LangGraphAgent:
         基于 self.state["messages"] 中的实际消息（已被管理）+ file_snapshots.
         """
         if tiktoken is None:
-            return {"used_tokens": 0, "limit_tokens": DEFAULT_CONTEXT_LIMIT, "percentage": 0.0}
+            return {
+                "used_tokens": 0,
+                "limit_tokens": DEFAULT_CONTEXT_LIMIT,
+                "percentage": 0.0,
+            }
         try:
             encoder = tiktoken.get_encoding("cl100k_base")
         except Exception:
-            return {"used_tokens": 0, "limit_tokens": DEFAULT_CONTEXT_LIMIT, "percentage": 0.0}
+            return {
+                "used_tokens": 0,
+                "limit_tokens": DEFAULT_CONTEXT_LIMIT,
+                "percentage": 0.0,
+            }
 
         total_tokens = 0
 

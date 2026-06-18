@@ -1,7 +1,6 @@
 """环境信息收集与注入测试."""
 
 import re
-from pathlib import Path
 
 from ai_coding.agent.service import AgentService
 from ai_coding.environment import EnvironmentInfo, collect_environment_info

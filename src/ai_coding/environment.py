@@ -6,7 +6,7 @@
 import os
 import platform as _platform
 import sys
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
@@ -16,7 +16,6 @@ from ai_coding.config import (
     KIMI_MODEL,
     OPENAI_MODEL,
 )
-
 
 _PROVIDER_META: Dict[str, Dict[str, str]] = {
     "kimi": {

@@ -2,8 +2,6 @@
 
 from pathlib import Path
 
-import pytest
-
 from ai_coding.tools.plan_tools import EnterPlanModeTool, ExitPlanModeTool
 
 

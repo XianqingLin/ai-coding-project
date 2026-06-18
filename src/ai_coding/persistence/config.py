@@ -7,7 +7,6 @@
 import os
 from pathlib import Path
 
-
 _ENV_VAR = "AI_CODE_HOME"
 
 

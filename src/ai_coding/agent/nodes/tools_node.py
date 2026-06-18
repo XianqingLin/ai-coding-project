@@ -18,6 +18,7 @@ from ai_coding.tools.todo_tool import TodoTool
 
 logger = get_logger(__name__)
 
+
 def _parse_read_file_result(result: str) -> tuple[str, str]:
     """从 read_file 返回结果中解析 (path, content).
 
@@ -252,7 +253,9 @@ def create_tools_node(
                 if extracted:
                     plan_mode = True
                     plan_file_path = extracted
-                    logger.info(f"[PlanMode] 已进入 Plan 模式，计划文件: {plan_file_path}")
+                    logger.info(
+                        f"[PlanMode] 已进入 Plan 模式，计划文件: {plan_file_path}"
+                    )
                 continue
 
             # ---------- exit_plan_mode 特殊处理 ----------
@@ -277,10 +280,12 @@ def create_tools_node(
                 if isinstance(raw_options, list):
                     for opt in raw_options:
                         if isinstance(opt, dict) and "label" in opt:
-                            options.append({
-                                "label": str(opt["label"]),
-                                "description": str(opt.get("description", "")),
-                            })
+                            options.append(
+                                {
+                                    "label": str(opt["label"]),
+                                    "description": str(opt.get("description", "")),
+                                }
+                            )
 
                 choice = _prompt_plan_approval(plan_content, options)
 
@@ -322,7 +327,9 @@ def create_tools_node(
                         options=options,
                         multi_select=multi_select,
                     )
-                    tool_messages.append(ToolMessage(content=result, tool_call_id=tool_id))
+                    tool_messages.append(
+                        ToolMessage(content=result, tool_call_id=tool_id)
+                    )
                 continue
 
             # ---------- 常规工具执行 ----------

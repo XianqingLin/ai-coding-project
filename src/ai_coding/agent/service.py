@@ -26,8 +26,8 @@ from ai_coding.agent.session import SessionManager
 from ai_coding.config import DEFAULT_LLM_PROVIDER
 from ai_coding.environment import collect_environment_info
 from ai_coding.llm import create_lc_llm
-from ai_coding.prompts import PromptContext
 from ai_coding.logger import get_logger
+from ai_coding.prompts import PromptContext
 from ai_coding.tools import create_default_tools
 
 logger = get_logger(__name__)
@@ -70,7 +70,9 @@ class AgentService:
 
         prompt_context = None
         if enable_env_info:
-            environment_info = collect_environment_info(self.work_dir, self.llm_provider)
+            environment_info = collect_environment_info(
+                self.work_dir, self.llm_provider
+            )
             prompt_context = PromptContext(environment_info=environment_info)
 
         self._sm = SessionManager(
@@ -135,7 +137,9 @@ class AgentService:
             return None
         return self._sm.get_current_agent()
 
-    def _get_agent_safe(self, session_id: Optional[str] = None) -> Optional[LangGraphAgent]:
+    def _get_agent_safe(
+        self, session_id: Optional[str] = None
+    ) -> Optional[LangGraphAgent]:
         """获取指定会话的 Agent 实例（只读：无副作用，不切换当前会话）."""
         sid = self._resolve_session_id(session_id)
         if sid is None:

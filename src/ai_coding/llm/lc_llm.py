@@ -36,9 +36,7 @@ def create_lc_llm(provider: str = "kimi") -> ChatOpenAI:
 
     if provider == "kimi":
         if not KIMI_API_KEY or KIMI_API_KEY == "your_kimi_api_key_here":
-            raise ValueError(
-                "Kimi API Key 未设置. 请在 .env 文件中设置 KIMI_API_KEY."
-            )
+            raise ValueError("Kimi API Key 未设置. 请在 .env 文件中设置 KIMI_API_KEY.")
 
         logger.info(f"创建 Kimi LLM | 模型: {KIMI_MODEL} | URL: {KIMI_BASE_URL}")
         return KimiChatOpenAI(
@@ -71,6 +69,4 @@ def create_lc_llm(provider: str = "kimi") -> ChatOpenAI:
         return MockChatModel()
 
     else:
-        raise ValueError(
-            f"未知的 LLM 提供商: '{provider}'. 可选: kimi, openai, mock"
-        )
+        raise ValueError(f"未知的 LLM 提供商: '{provider}'. 可选: kimi, openai, mock")

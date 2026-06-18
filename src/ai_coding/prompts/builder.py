@@ -3,10 +3,9 @@
 负责将静态模板、动态上下文与行为准则拼接为最终发送给模型的 system prompt。
 """
 
-from dataclasses import dataclass, field
-from typing import List, Optional
-
+from dataclasses import dataclass
 from importlib.resources import files
+from typing import List, Optional
 
 from ai_coding.environment import EnvironmentInfo
 from ai_coding.logger import get_logger

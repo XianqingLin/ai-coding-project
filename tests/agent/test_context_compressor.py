@@ -1,6 +1,5 @@
 """上下文压缩器单元测试."""
 
-import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from ai_coding.agent.context_compressor import ContextCompressor
@@ -8,10 +7,14 @@ from ai_coding.agent.context_compressor import ContextCompressor
 
 def _make_read_file_observation(path: str, size: int = 500) -> ToolMessage:
     """构造一个模拟 read_file 返回的长 ToolMessage."""
-    content = f"文件: {path}\n{'=' * 50}\n" + "\n".join(
-        f"{i:4d} | line content for {path} index {i} " + "x" * 80
-        for i in range(1, size + 1)
-    ) + f"\n{'=' * 50}\n"
+    content = (
+        f"文件: {path}\n{'=' * 50}\n"
+        + "\n".join(
+            f"{i:4d} | line content for {path} index {i} " + "x" * 80
+            for i in range(1, size + 1)
+        )
+        + f"\n{'=' * 50}\n"
+    )
     return ToolMessage(content=content, tool_call_id=f"call_{path}")
 
 
@@ -62,7 +65,9 @@ class TestContextCompressor:
 
         result = compressor.compress(messages)
         # 即使被压缩，也不应报错；token 应下降
-        assert compressor._estimate_tokens(result) < compressor._estimate_tokens(messages)
+        assert compressor._estimate_tokens(result) < compressor._estimate_tokens(
+            messages
+        )
 
     def test_empty_messages(self):
         compressor = ContextCompressor(token_budget=1000)

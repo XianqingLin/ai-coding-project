@@ -4,7 +4,6 @@
 的自动触发行为。
 """
 
-import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from ai_coding.agent.context_compressor import ContextCompressor
@@ -32,13 +31,17 @@ class TestContextCompressorStrategies:
     def test_summarize_long_tool_message(self) -> None:
         """超长 ToolMessage 应被摘要."""
         compressor = ContextCompressor(token_budget=500, keep_recent_turns=1)
-        long_content = "文件: src/main.py\n" + "\n".join(f"line {i}: code" for i in range(500))
+        long_content = "文件: src/main.py\n" + "\n".join(
+            f"line {i}: code" for i in range(500)
+        )
         messages = [
             SystemMessage(content="系统提示"),
             HumanMessage(content="读取文件"),
             AIMessage(
                 content="",
-                tool_calls=[{"name": "read_file", "args": {"path": "src/main.py"}, "id": "tc1"}],
+                tool_calls=[
+                    {"name": "read_file", "args": {"path": "src/main.py"}, "id": "tc1"}
+                ],
             ),
             ToolMessage(content=long_content, tool_call_id="tc1"),
             HumanMessage(content="还有呢？"),
@@ -59,13 +62,17 @@ class TestContextCompressorStrategies:
             HumanMessage(content="读文件"),
             AIMessage(
                 content="",
-                tool_calls=[{"name": "read_file", "args": {"path": "src/main.py"}, "id": "tc1"}],
+                tool_calls=[
+                    {"name": "read_file", "args": {"path": "src/main.py"}, "id": "tc1"}
+                ],
             ),
             ToolMessage(content=content, tool_call_id="tc1"),
             HumanMessage(content="再读一次"),
             AIMessage(
                 content="",
-                tool_calls=[{"name": "read_file", "args": {"path": "src/main.py"}, "id": "tc2"}],
+                tool_calls=[
+                    {"name": "read_file", "args": {"path": "src/main.py"}, "id": "tc2"}
+                ],
             ),
             ToolMessage(content=content, tool_call_id="tc2"),
             HumanMessage(content="总结"),
@@ -134,4 +141,7 @@ class TestLangGraphAgentAutoCompact:
         assert compressed_count < original_count
         # 压缩后应在预算内（考虑 AUTO_COMPACT_THRESHOLD=0.95）
         compressor = agent.context_compressor
-        assert compressor._estimate_tokens(agent.state["messages"]) <= compressor.token_budget
+        assert (
+            compressor._estimate_tokens(agent.state["messages"])
+            <= compressor.token_budget
+        )

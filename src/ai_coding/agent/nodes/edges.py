@@ -39,7 +39,10 @@ def create_should_continue(tool_registry: ToolRegistry, auto_approve: bool = Fal
             except KeyError:
                 continue
 
-            if getattr(tool, "requires_approval", False) and name not in globally_approved:
+            if (
+                getattr(tool, "requires_approval", False)
+                and name not in globally_approved
+            ):
                 return "approval"
 
         return "tools"

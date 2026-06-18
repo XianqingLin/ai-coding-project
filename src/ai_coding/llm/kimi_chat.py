@@ -5,9 +5,9 @@ LangChain 的 ChatOpenAI 不自动解析此字段, 需手动拦截.
 """
 
 import openai
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessageChunk
 from langchain_core.outputs import ChatGenerationChunk, ChatResult
+from langchain_openai import ChatOpenAI
 
 from ai_coding.logger import get_logger
 
@@ -55,7 +55,9 @@ class KimiChatOpenAI(ChatOpenAI):
         """
         result = super()._create_chat_result(response, generation_info)
 
-        if isinstance(response, openai.BaseModel) and getattr(response, "choices", None):
+        if isinstance(response, openai.BaseModel) and getattr(
+            response, "choices", None
+        ):
             for i, choice in enumerate(response.choices):
                 if i >= len(result.generations):
                     break

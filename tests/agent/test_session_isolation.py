@@ -7,8 +7,6 @@
 3. 持久化后重启 AgentService，会话状态可正确恢复。
 """
 
-import pytest
-
 from ai_coding.agent import AgentService
 from ai_coding.mock_llm import MockChatModel, mock_text
 

@@ -1,14 +1,6 @@
 """AgentService 单元测试."""
 
-import pytest
-
 from ai_coding.agent import AgentService
-from ai_coding.agent.events import (
-    AssistantChunkEvent,
-    AssistantEndEvent,
-    AssistantStartEvent,
-    UserInputEvent,
-)
 from ai_coding.mock_llm import MockChatModel, mock_text, mock_tool_call
 
 
@@ -21,7 +13,9 @@ class TestAgentService:
 
         assert sid
         sessions = svc.list_sessions()
-        assert any(s["session_id"] == sid and s["name"] == "test-session" for s in sessions)
+        assert any(
+            s["session_id"] == sid and s["name"] == "test-session" for s in sessions
+        )
         assert svc.current_session_id == sid
 
     def test_switch_session(self, isolated_work_dir):
@@ -59,8 +53,13 @@ class TestAgentService:
 
         assert reply == "Hello!"
         history = svc.get_history()
-        assert any(h.get("role") == "user" and h.get("content") == "hi" for h in history)
-        assert any(h.get("role") == "assistant" and h.get("content") == "Hello!" for h in history)
+        assert any(
+            h.get("role") == "user" and h.get("content") == "hi" for h in history
+        )
+        assert any(
+            h.get("role") == "assistant" and h.get("content") == "Hello!"
+            for h in history
+        )
 
     def test_send_message_stream(self, isolated_work_dir):
         llm = MockChatModel(responses=[mock_text("streamed")])
@@ -78,11 +77,17 @@ class TestAgentService:
 
     def test_send_message_with_tool_call(self, isolated_work_dir):
         """测试完整的 ReAct 循环通过 AgentService 正常工作."""
-        llm = MockChatModel(responses=[
-            mock_tool_call("list_dir", {"path": "."}, content="查看目录", call_id="tc1"),
-            mock_text("目录查看完成。"),
-        ])
-        svc = AgentService(work_dir=str(isolated_work_dir), llm_factory=lambda: llm, auto_approve=True)
+        llm = MockChatModel(
+            responses=[
+                mock_tool_call(
+                    "list_dir", {"path": "."}, content="查看目录", call_id="tc1"
+                ),
+                mock_text("目录查看完成。"),
+            ]
+        )
+        svc = AgentService(
+            work_dir=str(isolated_work_dir), llm_factory=lambda: llm, auto_approve=True
+        )
         svc.create_session("test")
 
         reply = svc.send_message("查看当前目录")

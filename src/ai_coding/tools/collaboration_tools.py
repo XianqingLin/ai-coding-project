@@ -51,10 +51,12 @@ class AskUserQuestionTool(Tool):
         validated = []
         for i, opt in enumerate(options):
             if isinstance(opt, dict) and "label" in opt:
-                validated.append({
-                    "label": str(opt["label"]),
-                    "description": str(opt.get("description", "")),
-                })
+                validated.append(
+                    {
+                        "label": str(opt["label"]),
+                        "description": str(opt.get("description", "")),
+                    }
+                )
 
         print(f"\n[AskUserQuestion] {question}")
         print("-" * 50)
@@ -142,9 +144,12 @@ class AgentTool(Tool):
         self._on_edit_proposal: Optional[Callable[[Dict[str, Any]], None]] = None
         self._parent_work_dir: str = ""
         from ai_coding.agent.sub_agent_manager import SubAgentManager
+
         self._manager = SubAgentManager()
 
-    def set_llm(self, llm: Any, llm_factory: Optional[Callable[[], Any]] = None) -> None:
+    def set_llm(
+        self, llm: Any, llm_factory: Optional[Callable[[], Any]] = None
+    ) -> None:
         """由 LangGraphAgent 注入 LLM 依赖."""
         self._llm = llm
         self._llm_factory = llm_factory
@@ -166,7 +171,9 @@ class AgentTool(Tool):
     @property
     def parameters(self) -> List[ToolParameter]:
         return [
-            ToolParameter("prompt", "string", "完整任务描述，子 Agent 将基于此独立工作"),
+            ToolParameter(
+                "prompt", "string", "完整任务描述，子 Agent 将基于此独立工作"
+            ),
             ToolParameter(
                 "description",
                 "string",

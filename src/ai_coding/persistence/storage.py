@@ -106,14 +106,16 @@ class StorageEngine:
                 found = True
                 break
         if not found:
-            entries.append({
-                "session_id": session_id,
-                "work_dir": work_dir,
-                "work_dir_key": _work_dir_key(work_dir),
-                "name": name,
-                "created_at": created_at,
-                "updated_at": updated_at or time.time(),
-            })
+            entries.append(
+                {
+                    "session_id": session_id,
+                    "work_dir": work_dir,
+                    "work_dir_key": _work_dir_key(work_dir),
+                    "name": name,
+                    "created_at": created_at,
+                    "updated_at": updated_at or time.time(),
+                }
+            )
         self._save_index(entries)
 
     def remove_index(self, session_id: str) -> None:
@@ -152,7 +154,9 @@ class StorageEngine:
 
     def wire_path(self, work_dir: str, session_id: str, agent_id: str = "main") -> Path:
         """获取指定 Agent 的 wire 文件路径."""
-        return self.session_dir(work_dir, session_id) / "agents" / agent_id / "wire.jsonl"
+        return (
+            self.session_dir(work_dir, session_id) / "agents" / agent_id / "wire.jsonl"
+        )
 
     # ------------------------------------------------------------------ #
     # 元数据
@@ -169,7 +173,9 @@ class StorageEngine:
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
             with self._lock:
-                path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+                path.write_text(
+                    json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
         except Exception as e:
             logger.warning(f"保存会话元数据失败 [{session_id}]: {e}")
 
@@ -260,6 +266,7 @@ class StorageEngine:
     def delete_session(self, work_dir: str, session_id: str) -> bool:
         """删除会话的所有持久化数据."""
         import shutil
+
         path = self.session_dir(work_dir, session_id)
         if not path.exists():
             return False
@@ -270,4 +277,3 @@ class StorageEngine:
         except Exception as e:
             logger.warning(f"删除会话数据失败 [{session_id}]: {e}")
             return False
-

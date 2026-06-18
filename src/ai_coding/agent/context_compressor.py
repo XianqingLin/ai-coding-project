@@ -135,10 +135,7 @@ class ContextCompressor:
         # Step 2: 对 older 的长 ToolMessage 做结构化摘要
         older_before_summary = list(older)
         older = self._summarize_tool_messages(older)
-        if any(
-            o1.content != o2.content
-            for o1, o2 in zip(older_before_summary, older)
-        ):
+        if any(o1.content != o2.content for o1, o2 in zip(older_before_summary, older)):
             stats["strategies_applied"].append("summarize")
         tokens_after_summary = self._estimate_tokens(system_msgs + recent + older)
         logger.info(f"[Memory] ToolMessage 摘要后 | tokens={tokens_after_summary}")
@@ -160,19 +157,21 @@ class ContextCompressor:
         final_tokens = self._estimate_tokens(system_msgs + combined)
         if final_tokens > self.token_budget:
             sys_in_combined = [m for m in combined if isinstance(m, SystemMessage)]
-            non_system_combined = [m for m in combined if not isinstance(m, SystemMessage)]
+            non_system_combined = [
+                m for m in combined if not isinstance(m, SystemMessage)
+            ]
             non_system_combined = self._truncate_messages(non_system_combined)
             combined = sys_in_combined + non_system_combined
             stats["strategies_applied"].append("truncate")
             logger.warning(
-                f"[Memory] 触发截断 | final_tokens={self._estimate_tokens(system_msgs + combined)}"
+                "[Memory] 触发截断 | final_tokens=%s",
+                self._estimate_tokens(system_msgs + combined),
             )
 
         # 组装最终结果
         non_system_result = [m for m in combined if not isinstance(m, SystemMessage)]
         summary_in_combined = [
-            m for m in combined
-            if isinstance(m, SystemMessage) and m not in system_msgs
+            m for m in combined if isinstance(m, SystemMessage) and m not in system_msgs
         ]
         result = system_msgs + summary_in_combined + non_system_result
 
@@ -232,7 +231,10 @@ class ContextCompressor:
         """对 older turns 中的长 ToolMessage 做结构化摘要."""
         summarized: List[BaseMessage] = []
         for msg in messages:
-            if isinstance(msg, ToolMessage) and len(msg.content or "") > TOOL_SUMMARY_THRESHOLD:
+            if (
+                isinstance(msg, ToolMessage)
+                and len(msg.content or "") > TOOL_SUMMARY_THRESHOLD
+            ):
                 new_content = self._summarize_single_tool_result(msg)
                 summarized.append(
                     ToolMessage(content=new_content, tool_call_id=msg.tool_call_id)

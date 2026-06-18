@@ -136,7 +136,9 @@ class TaskOutputTool(Tool):
             header += "\n[Output] 暂无输出."
 
         if status == "running":
-            header += "\n[提示] 任务仍在运行中，可稍后再次调用 task_output 查看最新输出。"
+            header += (
+                "\n[提示] 任务仍在运行中，可稍后再次调用 task_output 查看最新输出。"
+            )
 
         return header
 

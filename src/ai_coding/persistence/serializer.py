@@ -14,7 +14,6 @@ from langchain_core.messages import (
     ToolMessage,
 )
 
-
 # 消息类型到类的映射
 _MSG_TYPE_MAP = {
     "human": HumanMessage,
@@ -56,8 +55,18 @@ def _deserialize_message(data: dict) -> BaseMessage:
             cls = HumanMessage
 
     # 过滤掉 LangChain 内部字段，保留核心字段
-    core_fields = {"content", "type", "name", "tool_call_id", "tool_calls", "id", "additional_kwargs"}
-    kwargs = {k: v for k, v in data.items() if k in core_fields or not k.startswith("_")}
+    core_fields = {
+        "content",
+        "type",
+        "name",
+        "tool_call_id",
+        "tool_calls",
+        "id",
+        "additional_kwargs",
+    }
+    kwargs = {
+        k: v for k, v in data.items() if k in core_fields or not k.startswith("_")
+    }
 
     return cls(**kwargs)
 

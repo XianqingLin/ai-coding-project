@@ -70,8 +70,16 @@ def test_system_prompt_structure() -> None:
         prompt_context=context,
     )
 
-    tool_guidelines = files("ai_coding.prompts").joinpath("guidelines_tool_usage.txt").read_text(encoding="utf-8")
-    system_guidelines = files("ai_coding.prompts").joinpath("guidelines_system_behavior.txt").read_text(encoding="utf-8")
+    tool_guidelines = (
+        files("ai_coding.prompts")
+        .joinpath("guidelines_tool_usage.txt")
+        .read_text(encoding="utf-8")
+    )
+    system_guidelines = (
+        files("ai_coding.prompts")
+        .joinpath("guidelines_system_behavior.txt")
+        .read_text(encoding="utf-8")
+    )
 
     main_pos = agent.system_prompt.find("你是一个 AI 编程助手")
     tool_pos = agent.system_prompt.find(tool_guidelines.splitlines()[0])

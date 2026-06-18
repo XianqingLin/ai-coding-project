@@ -22,20 +22,30 @@ def mock_provider(monkeypatch):
 
 class TestCLISessionCommands:
     def test_session_list(self, runner, isolated_work_dir):
-        result = runner.invoke(cli.app, ["session", "list", "--work-dir", str(isolated_work_dir)])
+        result = runner.invoke(
+            cli.app, ["session", "list", "--work-dir", str(isolated_work_dir)]
+        )
         assert result.exit_code == 0
         # SessionManager 会自动创建一个 default 会话
         assert "default" in result.output
 
     def test_session_new(self, runner, isolated_work_dir):
-        result = runner.invoke(cli.app, ["session", "new", "my-session", "--work-dir", str(isolated_work_dir)])
+        result = runner.invoke(
+            cli.app,
+            ["session", "new", "my-session", "--work-dir", str(isolated_work_dir)],
+        )
         assert result.exit_code == 0
         assert "Created session:" in result.output
 
     def test_session_switch_and_delete(self, runner, isolated_work_dir):
         # 先创建两个会话
-        runner.invoke(cli.app, ["session", "new", "session-a", "--work-dir", str(isolated_work_dir)])
-        result = runner.invoke(cli.app, ["session", "list", "--work-dir", str(isolated_work_dir)])
+        runner.invoke(
+            cli.app,
+            ["session", "new", "session-a", "--work-dir", str(isolated_work_dir)],
+        )
+        result = runner.invoke(
+            cli.app, ["session", "list", "--work-dir", str(isolated_work_dir)]
+        )
         sessions = result.output.strip().split("\n")
         # 找到 session-a 的 ID
         sid_a = None
@@ -46,17 +56,24 @@ class TestCLISessionCommands:
         assert sid_a
 
         # 切换
-        result = runner.invoke(cli.app, ["session", "switch", sid_a, "--work-dir", str(isolated_work_dir)])
+        result = runner.invoke(
+            cli.app, ["session", "switch", sid_a, "--work-dir", str(isolated_work_dir)]
+        )
         assert result.exit_code == 0
         assert f"Switched to: {sid_a}" in result.output
 
         # 删除
-        result = runner.invoke(cli.app, ["session", "delete", sid_a, "--work-dir", str(isolated_work_dir)])
+        result = runner.invoke(
+            cli.app, ["session", "delete", sid_a, "--work-dir", str(isolated_work_dir)]
+        )
         assert result.exit_code == 0
         assert f"Deleted session: {sid_a}" in result.output
 
     def test_session_switch_not_found(self, runner, isolated_work_dir):
-        result = runner.invoke(cli.app, ["session", "switch", "not-exist", "--work-dir", str(isolated_work_dir)])
+        result = runner.invoke(
+            cli.app,
+            ["session", "switch", "not-exist", "--work-dir", str(isolated_work_dir)],
+        )
         assert result.exit_code == 1
         assert "Session not found" in result.output
 
@@ -73,8 +90,13 @@ class TestCLIAskCommand:
 
     def test_ask_with_session(self, runner, isolated_work_dir):
         # 创建会话
-        result = runner.invoke(cli.app, ["session", "new", "test-sess", "--work-dir", str(isolated_work_dir)])
-        sessions = runner.invoke(cli.app, ["session", "list", "--work-dir", str(isolated_work_dir)]).output
+        result = runner.invoke(
+            cli.app,
+            ["session", "new", "test-sess", "--work-dir", str(isolated_work_dir)],
+        )
+        sessions = runner.invoke(
+            cli.app, ["session", "list", "--work-dir", str(isolated_work_dir)]
+        ).output
         sid = None
         for line in sessions.strip().split("\n"):
             if "test-sess" in line:
@@ -85,6 +107,14 @@ class TestCLIAskCommand:
         # 使用指定会话 ask
         result = runner.invoke(
             cli.app,
-            ["ask", "hi", "--work-dir", str(isolated_work_dir), "--auto-approve", "--session", sid],
+            [
+                "ask",
+                "hi",
+                "--work-dir",
+                str(isolated_work_dir),
+                "--auto-approve",
+                "--session",
+                sid,
+            ],
         )
         assert result.exit_code == 0

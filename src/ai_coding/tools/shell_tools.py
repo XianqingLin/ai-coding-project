@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from ai_coding.tools.base import Tool, ToolParameter
-from ai_coding.tools.sandbox import resolve_sandboxed_cwd, SandboxViolationError
+from ai_coding.tools.sandbox import SandboxViolationError, resolve_sandboxed_cwd
 
 
 class ExecuteCommandTool(Tool):
@@ -295,14 +295,13 @@ class ExecuteCommandTool(Tool):
     def _cleanup_old_logs(self) -> None:
         """清理超出保留数量的已终止任务日志."""
         terminated = [
-            (tid, t) for tid, t in self._bg_tasks.items()
-            if t["status"] != "running"
+            (tid, t) for tid, t in self._bg_tasks.items() if t["status"] != "running"
         ]
         if len(terminated) <= self.MAX_LOG_RETENTION:
             return
         # 按 end_time 升序，保留最新的 MAX_LOG_RETENTION 个
         terminated.sort(key=lambda x: x[1].get("end_time") or 0)
-        to_remove = terminated[:-self.MAX_LOG_RETENTION]
+        to_remove = terminated[: -self.MAX_LOG_RETENTION]
         for tid, t in to_remove:
             try:
                 Path(t["output_path"]).unlink(missing_ok=True)

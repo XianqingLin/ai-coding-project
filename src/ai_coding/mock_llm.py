@@ -14,7 +14,9 @@ from ai_coding.logger import get_logger
 logger = get_logger(__name__)
 
 
-def mock_tool_call(name: str, args: Dict[str, Any], content: str = "", call_id: str = "") -> AIMessage:
+def mock_tool_call(
+    name: str, args: Dict[str, Any], content: str = "", call_id: str = ""
+) -> AIMessage:
     """快速构造一个带 tool_calls 的 AIMessage.
 
     Args:
@@ -29,12 +31,14 @@ def mock_tool_call(name: str, args: Dict[str, Any], content: str = "", call_id: 
     """
     return AIMessage(
         content=content,
-        tool_calls=[{
-            "name": name,
-            "args": args,
-            "id": call_id or f"mock_{name}",
-            "type": "tool_call",
-        }],
+        tool_calls=[
+            {
+                "name": name,
+                "args": args,
+                "id": call_id or f"mock_{name}",
+                "type": "tool_call",
+            }
+        ],
         additional_kwargs={"reasoning_content": ""},
     )
 
@@ -101,8 +105,15 @@ class MockChatModel:
 
         """
         last_msg = messages[-1] if messages else None
-        last_content = last_msg.content[:150] if last_msg and hasattr(last_msg, "content") else ""
-        logger.info(f"[MockLLM] invoke | index={self._index}/{len(self.responses)} | last_msg={last_content!r}")
+        last_content = (
+            last_msg.content[:150] if last_msg and hasattr(last_msg, "content") else ""
+        )
+        logger.info(
+            "[MockLLM] invoke | index=%s/%s | last_msg=%r",
+            self._index,
+            len(self.responses),
+            last_content,
+        )
 
         if self.interactive:
             return self._interactive_invoke(messages)
@@ -115,12 +126,18 @@ class MockChatModel:
             # 确保有 reasoning_content 字段（兼容 Kimi K2.6 要求）
             if resp.tool_calls and "reasoning_content" not in resp.additional_kwargs:
                 resp.additional_kwargs["reasoning_content"] = ""
-            logger.info(f"[MockLLM] -> preset response: content_len={len(resp.content)} tool_calls={[tc.get('name') for tc in resp.tool_calls]}")
+            logger.info(
+                "[MockLLM] -> preset response: content_len=%s tool_calls=%s",
+                len(resp.content),
+                [tc.get("name") for tc in resp.tool_calls],
+            )
             return resp
 
         # 预设回复用完后的默认行为
         logger.warning("[MockLLM] 预设回复已用完，返回默认消息")
-        return AIMessage(content="[MockLLM] 预设回复序列已耗尽。请增加 responses 列表长度。")
+        return AIMessage(
+            content="[MockLLM] 预设回复序列已耗尽。请增加 responses 列表长度。"
+        )
 
     def stream(self, messages: List[BaseMessage], **kwargs: Any):
         """模拟流式输出.
@@ -135,7 +152,9 @@ class MockChatModel:
     def _interactive_invoke(self, messages: List[BaseMessage]) -> AIMessage:
         """交互模式：暂停并等待人工输入模拟回复."""
         last_msg = messages[-1] if messages else None
-        last_content = last_msg.content[:200] if last_msg and hasattr(last_msg, "content") else ""
+        last_content = (
+            last_msg.content[:200] if last_msg and hasattr(last_msg, "content") else ""
+        )
 
         print("\n" + "=" * 50)
         print(f"[MockLLM 交互模式] 第 {self._index + 1} 轮")
@@ -144,7 +163,9 @@ class MockChatModel:
         print("-" * 50)
         print("输入格式:")
         print("  text:<内容>          -> 纯文本回复")
-        print("  tool:<工具名> <JSON>  -> 调用工具（如 tool:read_file {'path': 'x.py'}）")
+        print(
+            "  tool:<工具名> <JSON>  -> 调用工具（如 tool:read_file {'path': 'x.py'}）"
+        )
         print("  tool:<工具名>         -> 调用工具（无参数）")
         print("=" * 50)
 
@@ -161,6 +182,7 @@ class MockChatModel:
             args = {}
             if len(parts) > 1:
                 import json
+
                 try:
                     args = json.loads(parts[1])
                 except json.JSONDecodeError:

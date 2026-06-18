@@ -10,7 +10,6 @@ from typing import Any, List
 
 from ai_coding.tools.base import Tool, ToolParameter
 
-
 # 保留词（case-insensitive）
 _RESERVED_LABELS = {"approve", "reject", "reject and exit", "revise"}
 

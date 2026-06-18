@@ -97,7 +97,9 @@ class TestAgentTool:
         assert "错误" in result
         assert "LLM" in result
 
-    def test_sync_dispatch(self, clean_sub_agent_manager, isolated_work_dir, monkeypatch):
+    def test_sync_dispatch(
+        self, clean_sub_agent_manager, isolated_work_dir, monkeypatch
+    ):
         """前台委派子 Agent 应返回执行结果."""
         SubAgentManager._instance = None
         tool = AgentTool()

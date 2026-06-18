@@ -18,7 +18,11 @@ from ai_coding.agent.events import (
     ToolCallEvent,
     UserInputEvent,
 )
-from ai_coding.agent.nodes import create_llm_node, create_should_continue, create_tools_node
+from ai_coding.agent.nodes import (
+    create_llm_node,
+    create_should_continue,
+    create_tools_node,
+)
 from ai_coding.agent.service import AgentService
 from ai_coding.agent.session import Session, SessionManager
 

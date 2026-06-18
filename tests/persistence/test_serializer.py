@@ -1,6 +1,5 @@
 """持久化序列化单元测试."""
 
-import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from ai_coding.agent.state import AgentState
@@ -39,11 +38,13 @@ class TestStateSerializer:
             "messages": [
                 AIMessage(
                     content="",
-                    tool_calls=[{
-                        "id": "call_1",
-                        "name": "read_file",
-                        "args": {"path": "main.py"},
-                    }],
+                    tool_calls=[
+                        {
+                            "id": "call_1",
+                            "name": "read_file",
+                            "args": {"path": "main.py"},
+                        }
+                    ],
                 ),
             ],
             "file_snapshots": {},

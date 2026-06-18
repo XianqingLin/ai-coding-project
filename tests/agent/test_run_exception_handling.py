@@ -4,9 +4,8 @@
 其他异常的分类提示行为。
 """
 
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Iterator, List
 
-import pytest
 from langchain_core.messages import AIMessage, BaseMessage
 
 from ai_coding.agent.core import LangGraphAgent
@@ -93,7 +92,9 @@ class TestHandleRunException:
 
     def test_interrupted_error_message(self):
         """InterruptedError 应提示已取消."""
-        agent = LangGraphAgent(work_dir=".", llm=MockChatModel(), tools=[], system_prompt="test")
+        agent = LangGraphAgent(
+            work_dir=".", llm=MockChatModel(), tools=[], system_prompt="test"
+        )
 
         msg = agent._handle_run_exception(InterruptedError("cancelled"), "run")
 
@@ -102,7 +103,9 @@ class TestHandleRunException:
 
     def test_recursion_error_direct(self):
         """直接调用时 RecursionError 分类正确."""
-        agent = LangGraphAgent(work_dir=".", llm=MockChatModel(), tools=[], system_prompt="test")
+        agent = LangGraphAgent(
+            work_dir=".", llm=MockChatModel(), tools=[], system_prompt="test"
+        )
 
         msg = agent._handle_run_exception(RecursionError("depth"), "run_stream")
 
@@ -110,7 +113,9 @@ class TestHandleRunException:
 
     def test_api_error_direct(self):
         """直接调用时 API 异常分类正确."""
-        agent = LangGraphAgent(work_dir=".", llm=MockChatModel(), tools=[], system_prompt="test")
+        agent = LangGraphAgent(
+            work_dir=".", llm=MockChatModel(), tools=[], system_prompt="test"
+        )
 
         msg = agent._handle_run_exception(_MockAPIError("boom"), "run_stream_verbose")
 

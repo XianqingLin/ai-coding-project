@@ -9,8 +9,7 @@ from typing import Optional
 import typer
 
 from ai_coding.agent import AgentService
-from ai_coding.logger import setup_logging, get_logger
-
+from ai_coding.logger import get_logger, setup_logging
 
 logger = get_logger(__name__)
 
@@ -40,7 +39,9 @@ def _create_service(work_dir: str, auto_approve: bool = False) -> AgentService:
 def ask(
     prompt: str = typer.Argument(..., help="要发送给 Agent 的指令"),
     work_dir: str = typer.Option(".", "--work-dir", "-w", help="项目工作目录"),
-    auto_approve: bool = typer.Option(False, "--auto-approve", "-a", help="自动批准工具调用"),
+    auto_approve: bool = typer.Option(
+        False, "--auto-approve", "-a", help="自动批准工具调用"
+    ),
     session: Optional[str] = typer.Option(None, "--session", "-s", help="指定会话 ID"),
 ):
     """向 Agent 发送一次性指令并打印回复."""
@@ -60,13 +61,16 @@ def ask(
 @app.command()
 def chat(
     work_dir: str = typer.Option(".", "--work-dir", "-w", help="项目工作目录"),
-    auto_approve: bool = typer.Option(False, "--auto-approve", "-a", help="自动批准工具调用"),
+    auto_approve: bool = typer.Option(
+        False, "--auto-approve", "-a", help="自动批准工具调用"
+    ),
 ):
     """启动交互式聊天会话（固定为流式+verbose 模式）."""
     setup_logging()
     work_dir = _resolve_work_dir(work_dir)
 
     from ai_coding.tui import run_tui
+
     run_tui(work_dir=work_dir, auto_approve=auto_approve)
 
 
@@ -161,7 +165,11 @@ def main() -> None:
 
     if len(sys.argv) == 1:
         sys.argv.append("chat")
-    elif len(sys.argv) > 1 and sys.argv[1].startswith("-") and sys.argv[1] not in ("--help", "-h", "--version"):
+    elif (
+        len(sys.argv) > 1
+        and sys.argv[1].startswith("-")
+        and sys.argv[1] not in ("--help", "-h", "--version")
+    ):
         sys.argv.insert(1, "chat")
 
     app()

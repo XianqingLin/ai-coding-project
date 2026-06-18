@@ -29,7 +29,9 @@ class TestSubAgentManagerSingleton:
 class TestSubAgentManagerDispatch:
     """子 Agent 派发测试."""
 
-    def test_sync_dispatch_returns_result(self, clean_sub_agent_manager, isolated_work_dir):
+    def test_sync_dispatch_returns_result(
+        self, clean_sub_agent_manager, isolated_work_dir
+    ):
         """同步派发应返回子 Agent 执行结果."""
         manager = clean_sub_agent_manager
         llm = MockChatModel(responses=[mock_text("done")])
@@ -43,7 +45,9 @@ class TestSubAgentManagerDispatch:
 
         assert "done" in result
 
-    def test_background_dispatch_returns_task_id(self, clean_sub_agent_manager, isolated_work_dir):
+    def test_background_dispatch_returns_task_id(
+        self, clean_sub_agent_manager, isolated_work_dir
+    ):
         """后台派发应返回任务 ID."""
         manager = clean_sub_agent_manager
         llm = MockChatModel(responses=[mock_text("done")])
@@ -58,7 +62,9 @@ class TestSubAgentManagerDispatch:
 
         assert "后台启动" in result
 
-    def test_background_instance_stored_and_runnable(self, clean_sub_agent_manager, isolated_work_dir):
+    def test_background_instance_stored_and_runnable(
+        self, clean_sub_agent_manager, isolated_work_dir
+    ):
         """后台派发的实例应被记录，且最终完成."""
         manager = clean_sub_agent_manager
         llm = MockChatModel(responses=[mock_text("background result")])
@@ -73,7 +79,8 @@ class TestSubAgentManagerDispatch:
 
         # 提取 instance_id
         import re
-        match = re.search(r"ID: (sub_[a-f0-8]+)", result)
+
+        match = re.search(r"ID: (sub_[a-f0-9]+)", result)
         assert match
         sid = match.group(1)
 
@@ -83,6 +90,7 @@ class TestSubAgentManagerDispatch:
 
         # 等待完成
         import time
+
         for _ in range(50):
             instance = manager.get_instance(sid)
             if instance.status in ("completed", "failed"):
@@ -152,7 +160,9 @@ class TestSubAgentManagerQuery:
         assert len(completed) >= 1
         assert len(running) == 0
 
-    def test_pending_notifications_and_mark_notified(self, clean_sub_agent_manager, isolated_work_dir):
+    def test_pending_notifications_and_mark_notified(
+        self, clean_sub_agent_manager, isolated_work_dir
+    ):
         """已完成实例应出现在 pending notifications，标记后消失."""
         manager = clean_sub_agent_manager
         llm = MockChatModel(responses=[mock_text("done")])

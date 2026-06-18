@@ -38,7 +38,9 @@ def _build_file_context_message(snapshots: Dict[str, str]) -> SystemMessage:
         if total > FILE_SNAPSHOT_MAX_LINES:
             head = "\n".join(content_lines[: FILE_SNAPSHOT_MAX_LINES // 2])
             tail = "\n".join(content_lines[-FILE_SNAPSHOT_MAX_LINES // 2 :])
-            lines.append(f"{head}\n...（省略 {total - FILE_SNAPSHOT_MAX_LINES} 行）...\n{tail}")
+            lines.append(
+                f"{head}\n...（省略 {total - FILE_SNAPSHOT_MAX_LINES} 行）...\n{tail}"
+            )
         else:
             lines.append(content)
 
@@ -107,7 +109,9 @@ def create_llm_node(llm: "BaseChatModel"):
         if file_ctx_msg.content:
             messages.insert(insert_idx, file_ctx_msg)
             insert_idx += 1
-            logger.debug(f"[LLM] 注入文件快照 | 文件数={len(state.get('file_snapshots', {}))}")
+            logger.debug(
+                f"[LLM] 注入文件快照 | 文件数={len(state.get('file_snapshots', {}))}"
+            )
 
         if todo_ctx_msg.content:
             messages.insert(insert_idx, todo_ctx_msg)
@@ -119,18 +123,18 @@ def create_llm_node(llm: "BaseChatModel"):
         sub_agent_human_msg = _build_sub_agent_human_message(manager)
         if sub_agent_human_msg.content:
             messages.append(sub_agent_human_msg)
-            logger.info(f"[LLM] 注入子 Agent 结果 HumanMessage | 数量={len(manager.get_pending_notifications())}")
+            logger.info(
+                "[LLM] 注入子 Agent 结果 HumanMessage | 数量=%s",
+                len(manager.get_pending_notifications()),
+            )
 
         # 记录 LLM 输入摘要
         last_msg = messages[-1] if messages else None
         last_content = (
-            last_msg.content[:100]
-            if last_msg and hasattr(last_msg, "content")
-            else ""
+            last_msg.content[:100] if last_msg and hasattr(last_msg, "content") else ""
         )
         logger.info(
-            f"[LLM IN]  messages={len(messages)} "
-            f"last_content={last_content!r}"
+            f"[LLM IN]  messages={len(messages)} " f"last_content={last_content!r}"
         )
         t0 = time.time()
 

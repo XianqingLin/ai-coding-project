@@ -12,9 +12,9 @@ from typing import Any, Callable, Dict, List, Optional
 
 from ai_coding.agent.core import LangGraphAgent
 from ai_coding.logger import get_logger
-from ai_coding.prompts import PromptContext, SystemPromptBuilder
 from ai_coding.persistence import StorageEngine, state_from_json, state_to_json
 from ai_coding.persistence.storage import _work_dir_key
+from ai_coding.prompts import PromptContext, SystemPromptBuilder
 from ai_coding.tools import create_default_tools
 
 logger = get_logger(__name__)
@@ -83,7 +83,9 @@ class SessionManager:
         self.prompt_context = prompt_context
         self.system_prompt_builder = system_prompt_builder
         self.auto_approve = auto_approve
-        self.work_dir = str(Path(work_dir).resolve()) if work_dir else str(Path.cwd().resolve())
+        self.work_dir = (
+            str(Path(work_dir).resolve()) if work_dir else str(Path.cwd().resolve())
+        )
         self.event_loop = event_loop
         self.on_approval_request = on_approval_request
         self.on_edit_proposal = on_edit_proposal
@@ -191,7 +193,7 @@ class SessionManager:
         current_key = _work_dir_key(self.work_dir)
         for entry in entries:
             if entry.get("work_dir_key") == current_key:
-                entry["is_current"] = (entry.get("session_id") == session_id)
+                entry["is_current"] = entry.get("session_id") == session_id
         try:
             self.storage._save_index(entries)
         except Exception as e:
@@ -373,8 +375,13 @@ class SessionManager:
         """
         if session_id not in self.sessions:
             return False
-        self.sessions[session_id].name = new_name.strip() or self.sessions[session_id].name
-        self._save_session_meta(self.sessions[session_id], is_current=(session_id == self.current_session_id))
+        self.sessions[session_id].name = (
+            new_name.strip() or self.sessions[session_id].name
+        )
+        self._save_session_meta(
+            self.sessions[session_id],
+            is_current=(session_id == self.current_session_id),
+        )
         return True
 
     # ------------------------------------------------------------------ #
@@ -398,7 +405,9 @@ class SessionManager:
         try:
             state_text = state_to_json(session.agent.state)
             self.storage.save_state(self.work_dir, sid, state_text)
-            self._save_session_meta(session, is_current=(sid == self.current_session_id))
+            self._save_session_meta(
+                session, is_current=(sid == self.current_session_id)
+            )
             return True
         except Exception as e:
             logger.warning(f"保存会话状态失败 [{sid}]: {e}")

@@ -127,12 +127,14 @@ def create_approval_gate(
                         )
                         continue
 
-                pending_requests.append({
-                    "future": registered_future,
-                    "request_id": request_id,
-                    "tool": name,
-                    "tool_call_id": tool_call_id,
-                })
+                pending_requests.append(
+                    {
+                        "future": registered_future,
+                        "request_id": request_id,
+                        "tool": name,
+                        "tool_call_id": tool_call_id,
+                    }
+                )
                 continue
 
             # 命令行回退模式

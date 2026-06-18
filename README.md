@@ -1,5 +1,8 @@
 # AI Coding
 
+[![CI](https://github.com/XianqingLin/ai-coding-project/actions/workflows/ci.yml/badge.svg)](https://github.com/XianqingLin/ai-coding-project/actions)
+[![Coverage](https://codecov.io/gh/XianqingLin/ai-coding-project/branch/master/graph/badge.svg)](https://codecov.io/gh/XianqingLin/ai-coding-project)
+
 一个基于 AI 的**控制台交互式编程助手**，参考 [Claude Code](https://github.com/anthropropics/claude-code) 设计。
 
 通过自然语言与 AI 对话，让它帮你读取文件、编辑代码、执行命令、回答问题。

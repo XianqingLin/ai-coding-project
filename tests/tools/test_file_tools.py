@@ -1,10 +1,15 @@
 """文件类工具单元测试."""
 
-from pathlib import Path
-
 import pytest
 
-from ai_coding.tools.file_tools import EditFile, GlobTool, GrepTool, ListDirTool, ReadFileTool, WriteFileTool
+from ai_coding.tools.file_tools import (
+    EditFile,
+    GlobTool,
+    GrepTool,
+    ListDirTool,
+    ReadFileTool,
+    WriteFileTool,
+)
 
 
 @pytest.fixture
@@ -67,7 +72,9 @@ class TestReadFileTool:
 
     def test_read_with_offset_and_limit(self, read_tool, isolated_work_dir):
         file_path = isolated_work_dir / "nums.txt"
-        file_path.write_text("\n".join(f"line{i}" for i in range(1, 11)), encoding="utf-8")
+        file_path.write_text(
+            "\n".join(f"line{i}" for i in range(1, 11)), encoding="utf-8"
+        )
 
         result = read_tool.execute("nums.txt", line_offset=3, n_lines=4)
 
@@ -82,13 +89,17 @@ class TestWriteFileTool:
         result = write_tool.execute("new.txt", "hello world")
 
         assert result.startswith("[成功]")
-        assert (isolated_work_dir / "new.txt").read_text(encoding="utf-8") == "hello world"
+        assert (isolated_work_dir / "new.txt").read_text(
+            encoding="utf-8"
+        ) == "hello world"
 
     def test_write_nested_file(self, write_tool, isolated_work_dir):
         result = write_tool.execute("a/b/c.txt", "nested")
 
         assert result.startswith("[成功]")
-        assert (isolated_work_dir / "a" / "b" / "c.txt").read_text(encoding="utf-8") == "nested"
+        assert (isolated_work_dir / "a" / "b" / "c.txt").read_text(
+            encoding="utf-8"
+        ) == "nested"
 
 
 class TestEditFileTool:
@@ -131,8 +142,12 @@ class TestListDirTool:
 
 class TestGrepTool:
     def test_grep_pattern(self, grep_tool, isolated_work_dir):
-        (isolated_work_dir / "a.py").write_text("def foo():\n    pass\n", encoding="utf-8")
-        (isolated_work_dir / "b.py").write_text("def bar():\n    pass\n", encoding="utf-8")
+        (isolated_work_dir / "a.py").write_text(
+            "def foo():\n    pass\n", encoding="utf-8"
+        )
+        (isolated_work_dir / "b.py").write_text(
+            "def bar():\n    pass\n", encoding="utf-8"
+        )
 
         result = grep_tool.execute(pattern="def foo", path=".")
 
