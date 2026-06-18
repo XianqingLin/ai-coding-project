@@ -1,0 +1,14 @@
+{
+  "name": "arch_add_feature",
+  "description": "Add a new function without breaking existing code",
+  "prompt": "Add a new function `is_palindrome(s: str) -> bool` to `string_tools.py` that returns True if `s` is a palindrome. Do not break the existing `reverse` function. Run `python tests/test_string_tools.py` to verify.",
+  "max_rounds": 3,
+  "auto_approve": true,
+  "initial_files": ["string_tools.py", "tests/*"],
+  "evaluation": {
+    "type": "script",
+    "command": "python tests/test_string_tools.py",
+    "timeout": 30,
+    "expected_exit_code": 0
+  }
+}

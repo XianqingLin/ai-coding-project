@@ -112,6 +112,13 @@ class TestSubAgentManagerToolsAndPrompts:
         assert "write_file" in tool_names
         assert "execute_command" in tool_names
 
+    def test_unknown_agent_type_uses_all_tools(self):
+        """未知类型回退到使用全部工具."""
+        manager = SubAgentManager()
+        tools = manager._get_tools_for_type("unknown")
+        tool_names = {t.name for t in tools}
+        assert "write_file" in tool_names
+
     def test_explore_prompt_is_readonly(self):
         """explore 类型应使用只读专用 prompt."""
         manager = SubAgentManager()
@@ -127,6 +134,11 @@ class TestSubAgentManagerToolsAndPrompts:
         prompt = manager._get_prompt_for_type("coder")
 
         assert prompt is None
+
+    def test_unknown_prompt_is_none(self):
+        """未知类型 prompt 回退到 None."""
+        manager = SubAgentManager()
+        assert manager._get_prompt_for_type("unknown") is None
 
 
 class TestSubAgentManagerQuery:
@@ -247,3 +259,99 @@ class TestSubAgentManagerFailure:
             instance_id=sid,
         )
         assert "仍在运行" in resume_result
+
+
+class TestSubAgentManagerResume:
+    """唤回（resume）实例测试."""
+
+    def test_resume_completed_instance_sync(
+        self, clean_sub_agent_manager, isolated_work_dir
+    ):
+        """同步唤回已完成实例并执行新任务."""
+        manager = clean_sub_agent_manager
+        llm = MockChatModel(responses=[mock_text("done")])
+
+        manager.dispatch(
+            agent_type="coder",
+            prompt="first",
+            llm=llm,
+            work_dir=str(isolated_work_dir),
+        )
+        sid = manager.list_instances()[0].instance_id
+
+        # 使用全新的 LLM 唤回，避免响应耗尽
+        resume_llm = MockChatModel(responses=[mock_text("resumed result")])
+        result = manager.dispatch(
+            agent_type="coder",
+            prompt="second",
+            llm=resume_llm,
+            instance_id=sid,
+            work_dir=str(isolated_work_dir),
+        )
+        assert "resumed result" in result
+        assert manager.get_instance(sid).status == "completed"
+
+    def test_resume_completed_instance_background(
+        self, clean_sub_agent_manager, isolated_work_dir
+    ):
+        """后台唤回已完成实例."""
+        manager = clean_sub_agent_manager
+        llm = MockChatModel(responses=[mock_text("done")])
+
+        manager.dispatch(
+            agent_type="coder",
+            prompt="first",
+            llm=llm,
+            work_dir=str(isolated_work_dir),
+        )
+        sid = manager.list_instances()[0].instance_id
+
+        resume_llm = MockChatModel(responses=[mock_text("bg resumed")])
+        result = manager.dispatch(
+            agent_type="coder",
+            prompt="second",
+            llm=resume_llm,
+            instance_id=sid,
+            work_dir=str(isolated_work_dir),
+            run_in_background=True,
+        )
+        assert "唤回并后台运行" in result
+        assert sid in result
+
+    def test_resume_nonexistent_instance(self, clean_sub_agent_manager):
+        """直接唤回不存在的实例返回错误."""
+        manager = clean_sub_agent_manager
+        result = manager._resume_instance(
+            instance_id="not_exist",
+            prompt="x",
+            llm=MockChatModel(),
+            llm_factory=None,
+            run_in_background=False,
+        )
+        assert "实例不存在" in result
+
+    def test_resume_with_llm_factory(
+        self, clean_sub_agent_manager, isolated_work_dir
+    ):
+        """唤回时通过 llm_factory 提供新 LLM."""
+        manager = clean_sub_agent_manager
+        llm = MockChatModel(responses=[mock_text("first")])
+
+        manager.dispatch(
+            agent_type="coder",
+            prompt="first",
+            llm=llm,
+            work_dir=str(isolated_work_dir),
+        )
+        sid = manager.list_instances()[0].instance_id
+
+        new_llm = MockChatModel(responses=[mock_text("factory result")])
+        result = manager.dispatch(
+            agent_type="coder",
+            prompt="second",
+            llm=None,
+            llm_factory=lambda: new_llm,
+            instance_id=sid,
+            work_dir=str(isolated_work_dir),
+        )
+        assert "factory result" in result

@@ -1,0 +1,14 @@
+{
+  "name": "arch_multi_file_read",
+  "description": "Read multiple files and generate output based on their contents",
+  "prompt": "Read `config.json` and `template.txt`. Replace `{{greeting}}` and `{{target}}` in the template with the corresponding values from config.json, and write the result to `output.txt`. Run `python tests/test_output.py` to verify.",
+  "max_rounds": 3,
+  "auto_approve": true,
+  "initial_files": ["config.json", "template.txt", "tests/*"],
+  "evaluation": {
+    "type": "script",
+    "command": "python tests/test_output.py",
+    "timeout": 30,
+    "expected_exit_code": 0
+  }
+}

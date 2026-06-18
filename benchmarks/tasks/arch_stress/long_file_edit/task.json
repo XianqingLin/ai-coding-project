@@ -1,0 +1,14 @@
+{
+  "name": "arch_long_file_edit",
+  "description": "Find and fix a specific function in a long file",
+  "prompt": "In `data_processor.py`, find the `process_data` function and change it so that it returns a new list with every element doubled. Do not modify any other function. Run `python tests/test_processor.py` to verify.",
+  "max_rounds": 3,
+  "auto_approve": true,
+  "initial_files": ["data_processor.py", "tests/*"],
+  "evaluation": {
+    "type": "script",
+    "command": "python tests/test_processor.py",
+    "timeout": 30,
+    "expected_exit_code": 0
+  }
+}

@@ -46,6 +46,53 @@ class TestLangGraphAgent:
 
         assert "".join(chunks) == "streamed"
 
+    def test_run_stream_verbose_text(self):
+        """run_stream_verbose 输出 thinking/assistant 事件."""
+        llm = MockChatModel(responses=[mock_text("verbose result")])
+        agent = LangGraphAgent(llm=llm, tools=[])
+
+        events = list(agent.run_stream_verbose("hi"))
+
+        assert any(e.get("type") == "assistant_start" for e in events)
+        assert any(
+            e.get("type") == "assistant_chunk" and "verbose result" in e.get("text", "")
+            for e in events
+        )
+        assert any(e.get("type") == "assistant_end" for e in events)
+
+    def test_run_stream_verbose_with_tool_call(self):
+        """run_stream_verbose 输出 tool_call 和 observation 事件."""
+        llm = MockChatModel(
+            responses=[
+                mock_tool_call("list_dir", {"path": "."}, content="调用工具", call_id="tc1"),
+                mock_text("done"),
+            ]
+        )
+        tools = [t for t in create_default_tools() if t.name in ("list_dir",)]
+        agent = LangGraphAgent(llm=llm, tools=tools, auto_approve=True)
+
+        events = list(agent.run_stream_verbose("查看目录"))
+
+        assert any(
+            e.get("type") == "tool_call" and e.get("name") == "list_dir" for e in events
+        )
+        assert any(e.get("type") == "observation" for e in events)
+
+    def test_run_stream_verbose_error(self):
+        """run_stream_verbose 在异常时输出 error 事件."""
+
+        class BadLLM(MockChatModel):
+            def invoke(self, messages, **kwargs):
+                raise RuntimeError("boom")
+
+            def stream(self, messages, **kwargs):
+                raise RuntimeError("boom")
+
+        agent = LangGraphAgent(llm=BadLLM(), tools=[])
+        events = list(agent.run_stream_verbose("hi"))
+
+        assert any("boom" in e.get("text", "") for e in events if e.get("type") == "error")
+
     def test_clear_history(self):
         llm = MockChatModel(responses=[mock_text("reply")])
         agent = LangGraphAgent(llm=llm, tools=[])
@@ -67,3 +114,30 @@ class TestLangGraphAgent:
             h.get("role") == "user" and h.get("content") == "hi" for h in history
         )
         assert any(h.get("role") == "assistant" for h in history)
+
+    def test_get_context_usage(self):
+        llm = MockChatModel(responses=[mock_text("reply")])
+        agent = LangGraphAgent(llm=llm, tools=[])
+        agent.run("hi")
+
+        usage = agent.get_context_usage()
+        assert usage["used_tokens"] > 0
+        assert usage["limit_tokens"] > 0
+        assert usage["percentage"] >= 0.0
+
+    def test_get_context_usage_before_run(self):
+        agent = LangGraphAgent(llm=MockChatModel(), tools=[])
+        usage = agent.get_context_usage()
+        # 即使未运行，system_prompt 也会占用 token
+        assert usage["used_tokens"] > 0
+        assert usage["limit_tokens"] > 0
+
+    def test_get_stats(self):
+        llm = MockChatModel(responses=[mock_text("reply")])
+        agent = LangGraphAgent(llm=llm, tools=[])
+        agent.run("hi")
+
+        stats = agent.get_stats()
+        assert stats["message_count"] > 0
+        assert stats["type"] == "langgraph"
+        assert stats["thread_id"] == agent.thread_id

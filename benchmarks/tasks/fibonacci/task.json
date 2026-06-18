@@ -1,0 +1,14 @@
+{
+  "name": "fibonacci",
+  "description": "实现斐波那契数函数并通过单元测试",
+  "prompt": "请在当前目录下创建 fib.py，实现函数 `fib(n)`，返回第 n 个斐波那契数（从 0 开始：fib(0)=0, fib(1)=1）。\n然后运行 `python tests/test_fib.py` 验证实现。",
+  "max_rounds": 3,
+  "auto_approve": true,
+  "initial_files": ["tests/test_fib.py"],
+  "evaluation": {
+    "type": "script",
+    "command": "python tests/test_fib.py",
+    "timeout": 30,
+    "expected_exit_code": 0
+  }
+}

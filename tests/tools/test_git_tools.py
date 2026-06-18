@@ -357,3 +357,22 @@ class TestGitSandboxAndErrors:
     def test_add_empty_paths(self, git_add_tool):
         result = git_add_tool.execute(paths="   ")
         assert result.startswith("[错误]")
+
+
+class TestGitOutputTruncation:
+    def test_truncate_by_lines(self):
+        from ai_coding.tools.git_tools import _truncate_output
+
+        text = "\n".join(f"line {i}" for i in range(250))
+        result = _truncate_output(text)
+        assert "已截断" in result
+        assert result.count("\n") <= 205  # 200 行 + 截断提示
+
+    def test_truncate_by_bytes(self):
+        from ai_coding.tools.git_tools import _truncate_output
+
+        # 构造超过 32KB 的文本，但行数不超过 200
+        text = ("x" * 500 + "\n") * 100  # 约 50KB
+        result = _truncate_output(text)
+        assert "已截断" in result
+        assert len(result.encode("utf-8")) <= 33000

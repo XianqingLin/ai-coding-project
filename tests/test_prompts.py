@@ -105,3 +105,28 @@ def test_system_prompt_builder_missing_guideline_file() -> None:
         builder.build()
 
     assert "nonexistent_guideline.txt" in str(exc_info.value)
+
+
+def test_prompt_context_renders_memory_and_language() -> None:
+    """PromptContext 应渲染记忆摘要和语言偏好."""
+    context = PromptContext(
+        memory_summary="这是之前的记忆摘要",
+        language="中文",
+    )
+    parts = context.render_dynamic_parts()
+
+    assert any("记忆摘要" in p for p in parts)
+    assert any("中文" in p for p in parts)
+
+
+def test_prompt_context_empty_renders_nothing() -> None:
+    """PromptContext 所有字段为空时不渲染任何动态段落."""
+    context = PromptContext()
+    assert context.render_dynamic_parts() == []
+
+
+def test_prompt_context_no_environment_info() -> None:
+    """environment_info 为 None 时环境和日期都不渲染."""
+    context = PromptContext(environment_info=None)
+    assert context._render_environment() == ""
+    assert context._render_date() == ""

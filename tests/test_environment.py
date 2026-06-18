@@ -1,9 +1,17 @@
 """环境信息收集与注入测试."""
 
 import re
+import sys
+from pathlib import Path
+from unittest.mock import patch
 
 from ai_coding.agent.service import AgentService
-from ai_coding.environment import EnvironmentInfo, collect_environment_info
+from ai_coding.environment import (
+    EnvironmentInfo,
+    _detect_shell,
+    _is_git_repo,
+    collect_environment_info,
+)
 
 
 def test_environment_info_render() -> None:
@@ -29,6 +37,23 @@ def test_environment_info_render() -> None:
     assert "你由名为 Kimi 的模型驱动" in text
     assert "确切的模型 ID 是 kimi-k2.6" in text
     assert "助手知识截止日期为 2025-01" in text
+
+
+def test_environment_info_render_not_git() -> None:
+    """非 git 仓库时渲染应显示'否'."""
+    info = EnvironmentInfo(
+        cwd="/workspace",
+        is_git_repo=False,
+        platform="Windows",
+        shell="cmd.exe",
+        os_version="Windows-10",
+        marketing_name="Kimi",
+        model_id="kimi-k2.6",
+        knowledge_cutoff="2025-01",
+        date="2026-06-16",
+    )
+    text = info.render()
+    assert "是否为 git 仓库：否" in text
 
 
 def test_environment_info_to_dict() -> None:
@@ -74,6 +99,38 @@ def test_collect_environment_info_detects_git_repo(isolated_work_dir) -> None:
 
     info = collect_environment_info(str(isolated_work_dir), provider="mock")
     assert info.is_git_repo is True
+
+
+def test_collect_environment_info_unknown_provider_fallbacks_to_mock(
+    isolated_work_dir,
+) -> None:
+    """未知 provider 回退到 mock 元数据."""
+    info = collect_environment_info(str(isolated_work_dir), provider="unknown")
+    assert info.marketing_name == "Mock Model"
+
+
+def test_detect_shell_on_windows(monkeypatch) -> None:
+    """Windows 下 _detect_shell 读取 COMSPEC."""
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setenv("COMSPEC", "cmd.exe")
+    assert _detect_shell() == "cmd.exe"
+
+
+def test_detect_shell_on_non_windows(monkeypatch) -> None:
+    """非 Windows 下 _detect_shell 读取 SHELL."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    assert _detect_shell() == "/bin/zsh"
+
+
+def test_is_git_repo_os_error(isolated_work_dir, monkeypatch) -> None:
+    """_is_git_repo 在 OSError 时不应抛出."""
+
+    def raise_oserror(*args, **kwargs):
+        raise OSError("mock")
+
+    monkeypatch.setattr(Path, "resolve", raise_oserror)
+    assert _is_git_repo(isolated_work_dir) is False
 
 
 def test_agentservice_injects_environment_info(isolated_work_dir) -> None:

@@ -1,0 +1,14 @@
+{
+  "name": "tetris",
+  "description": "实现一个控制台俄罗斯方块，通过逻辑测试",
+  "prompt": "请在当前目录下实现一个控制台俄罗斯方块游戏，保存为 tetris.py。\n\n要求：\n1. 支持 7 种标准方块（I、O、T、S、Z、J、L）；\n2. 支持方块旋转、左右移动、下落、直接落底；\n3. 支持消行计分；\n4. 支持 Hold（暂存/交换）功能；\n5. 提供 BOARD_WIDTH、BOARD_HEIGHT、SHAPES、Tetromino、TetrisGame 等符号，使 `python tests/run_tetris_test.py` 能够全部通过。\n\n注意：curses 渲染部分只需要语法正确即可，测试脚本不依赖真实终端。",
+  "max_rounds": 5,
+  "auto_approve": true,
+  "initial_files": ["tests/run_tetris_test.py"],
+  "evaluation": {
+    "type": "script",
+    "command": "python tests/run_tetris_test.py",
+    "timeout": 120,
+    "expected_exit_code": 0
+  }
+}

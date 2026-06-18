@@ -1,0 +1,14 @@
+{
+  "name": "arch_rename_function",
+  "description": "Rename a function across multiple files and update imports",
+  "prompt": "Rename the function `old_name` in `utils.py` to `new_name`, and update `main.py` to import and use `new_name`. Do not change any behavior. Run `python tests/test_rename.py` to verify.",
+  "max_rounds": 3,
+  "auto_approve": true,
+  "initial_files": ["utils.py", "main.py", "tests/*"],
+  "evaluation": {
+    "type": "script",
+    "command": "python tests/test_rename.py",
+    "timeout": 30,
+    "expected_exit_code": 0
+  }
+}

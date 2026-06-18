@@ -53,3 +53,55 @@ class TestTodoTool:
     def test_add_without_task_returns_error(self, todo_tool):
         result = todo_tool.execute("add")
         assert result.startswith("[错误]")
+
+
+class TestTodoToolEdgeCases:
+    def test_list_empty(self, todo_tool):
+        assert todo_tool.execute("list") == "当前无待办任务。"
+
+    def test_complete_out_of_range(self, todo_tool):
+        todo_tool.execute("add", task="task")
+        result = todo_tool.execute("complete", index=5)
+        assert "超出范围" in result
+
+    def test_complete_no_params(self, todo_tool):
+        result = todo_tool.execute("complete")
+        assert "需要提供 index 或 task" in result
+
+    def test_complete_by_text_not_found(self, todo_tool):
+        todo_tool.execute("add", task="task")
+        result = todo_tool.execute("complete", task="notfound")
+        assert "未找到匹配的任务" in result
+
+    def test_remove_out_of_range(self, todo_tool):
+        todo_tool.execute("add", task="task")
+        result = todo_tool.execute("remove", index=5)
+        assert "超出范围" in result
+
+    def test_remove_no_params(self, todo_tool):
+        result = todo_tool.execute("remove")
+        assert "需要提供 index 或 task" in result
+
+    def test_remove_by_text_not_found(self, todo_tool):
+        todo_tool.execute("add", task="task")
+        result = todo_tool.execute("remove", task="notfound")
+        assert "未找到匹配的任务" in result
+
+    def test_update_no_task(self, todo_tool):
+        todo_tool.execute("add", task="task")
+        result = todo_tool.execute("update", index=1)
+        assert "必须提供 task 参数" in result
+
+    def test_update_no_index(self, todo_tool):
+        todo_tool.execute("add", task="task")
+        result = todo_tool.execute("update", task="new")
+        assert "必须提供 index 参数" in result
+
+    def test_update_out_of_range(self, todo_tool):
+        todo_tool.execute("add", task="task")
+        result = todo_tool.execute("update", index=5, task="new")
+        assert "超出范围" in result
+
+    def test_sync_and_todos_property(self, todo_tool):
+        todo_tool.sync([{"task": "synced", "done": True}])
+        assert todo_tool.todos == [{"task": "synced", "done": True}]

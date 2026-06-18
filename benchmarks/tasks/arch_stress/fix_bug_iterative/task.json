@@ -1,0 +1,14 @@
+{
+  "name": "arch_fix_bug_iterative",
+  "description": "Run tests, read failure output, and fix a bug",
+  "prompt": "There is a bug in `calculator.py`. Run the tests (`python tests/test_calc.py`), read the failure output, and fix the bug. Do not change the function name or signature.",
+  "max_rounds": 3,
+  "auto_approve": true,
+  "initial_files": ["calculator.py", "tests/*"],
+  "evaluation": {
+    "type": "script",
+    "command": "python tests/test_calc.py",
+    "timeout": 30,
+    "expected_exit_code": 0
+  }
+}
