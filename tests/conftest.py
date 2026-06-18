@@ -6,6 +6,9 @@ from pathlib import Path
 
 import pytest
 
+from ai_coding.agent.sub_agent_manager import SubAgentManager
+from ai_coding.tools.shell_tools import ExecuteCommandTool
+
 
 @pytest.fixture
 def isolated_work_dir():
@@ -21,3 +24,19 @@ def isolated_work_dir():
         os.chdir(tmp)
         yield Path(tmp)
         os.chdir(original_cwd)
+
+
+@pytest.fixture
+def clean_sub_agent_manager():
+    """清理 SubAgentManager 单例，保证测试隔离."""
+    SubAgentManager._instance = None
+    yield SubAgentManager()
+    SubAgentManager._instance = None
+
+
+@pytest.fixture
+def task_manager(isolated_work_dir):
+    """创建并配置 ExecuteCommandTool 作为任务管理器."""
+    tool = ExecuteCommandTool()
+    tool.set_work_dir(str(isolated_work_dir))
+    return tool

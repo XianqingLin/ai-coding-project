@@ -78,13 +78,6 @@ class StorageEngine:
         except Exception as e:
             logger.warning(f"保存会话索引失败: {e}")
 
-    def _find_index_entry(self, session_id: str) -> Optional[Dict[str, Any]]:
-        """按 session_id 查找索引条目."""
-        for entry in self._load_index():
-            if entry.get("session_id") == session_id:
-                return entry
-        return None
-
     def upsert_index(
         self,
         session_id: str,
@@ -236,28 +229,6 @@ class StorageEngine:
                 f.write(json.dumps(event, ensure_ascii=False) + "\n")
         except Exception as e:
             logger.warning(f"追加 wire 记录失败 [{session_id}/{agent_id}]: {e}")
-
-    def load_wire(
-        self,
-        work_dir: str,
-        session_id: str,
-        agent_id: str = "main",
-    ) -> List[Dict[str, Any]]:
-        """加载 wire 记录列表."""
-        path = self.wire_path(work_dir, session_id, agent_id)
-        if not path.exists():
-            return []
-        try:
-            entries = []
-            with self._lock, path.open("r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line:
-                        entries.append(json.loads(line))
-            return entries
-        except Exception as e:
-            logger.warning(f"加载 wire 记录失败 [{session_id}/{agent_id}]: {e}")
-            return []
 
     # ------------------------------------------------------------------ #
     # 清理

@@ -30,8 +30,7 @@ class ExecuteCommandTool(Tool):
 
     # 保留最近 50 个已终止任务的日志文件
     MAX_LOG_RETENTION = 50
-    # 前台默认超时 60 秒 = 60000 毫秒，上限 5 分钟 = 300000 毫秒
-    FOREGROUND_DEFAULT_TIMEOUT_MS = 60000
+    # 前台超时上限 5 分钟 = 300000 毫秒
     FOREGROUND_MAX_TIMEOUT_MS = 300000
 
     def __init__(self) -> None:

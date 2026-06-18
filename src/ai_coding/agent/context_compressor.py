@@ -39,7 +39,7 @@ TOOL_SUMMARY_THRESHOLD = 2_000
 FILE_PREVIEW_LINES = 5
 
 # grep 摘要保留的最大匹配数
-GREEP_PREVIEW_MATCHES = 10
+GREP_PREVIEW_MATCHES = 10
 
 
 class ContextCompressor:
@@ -269,11 +269,11 @@ class ContextCompressor:
             )
 
         # 3. 启发式判断：grep 结果
-        if total_lines > GREEP_PREVIEW_MATCHES and self._looks_like_grep(content):
-            preview = "\n".join(lines[:GREEP_PREVIEW_MATCHES])
+        if total_lines > GREP_PREVIEW_MATCHES and self._looks_like_grep(content):
+            preview = "\n".join(lines[:GREP_PREVIEW_MATCHES])
             return (
                 f"[搜索结果摘要: 共 {total_lines} 条匹配]\n"
-                f"{preview}\n...（省略其余 {total_lines - GREEP_PREVIEW_MATCHES} 条）..."
+                f"{preview}\n...（省略其余 {total_lines - GREP_PREVIEW_MATCHES} 条）..."
             )
 
         # 4. 兜底：长文本但非特定格式

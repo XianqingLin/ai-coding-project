@@ -54,15 +54,6 @@ def _parse_read_file_result(result: str) -> tuple[str, str]:
     return path, content
 
 
-def _extract_path_from_success(result: str) -> str:
-    """从 write_file/edit_file 成功消息中提取路径."""
-    if "文件已写入:" in result:
-        return result.split("文件已写入:", 1)[1].split("(")[0].strip()
-    if "文件已编辑:" in result:
-        return result.split("文件已编辑:", 1)[1].strip()
-    return ""
-
-
 def _extract_plan_path(result: str) -> str:
     """从 enter_plan_mode 返回结果中提取计划文件路径."""
     for line in result.split("\n"):

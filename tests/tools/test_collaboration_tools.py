@@ -1,18 +1,8 @@
 """协作类工具测试."""
 
-import pytest
-
 from ai_coding.agent.sub_agent_manager import SubAgentManager
 from ai_coding.mock_llm import MockChatModel, mock_text
 from ai_coding.tools.collaboration_tools import AgentTool, AskUserQuestionTool
-
-
-@pytest.fixture
-def clean_sub_agent_manager():
-    """清理 SubAgentManager 单例，保证测试隔离."""
-    SubAgentManager._instance = None
-    yield SubAgentManager()
-    SubAgentManager._instance = None
 
 
 class TestAskUserQuestionTool:

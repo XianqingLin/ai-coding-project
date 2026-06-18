@@ -247,15 +247,6 @@ class ToolRegistry:
         validated_args = tool.validate_args(arguments)
         return tool.execute(**validated_args)
 
-    def get_schemas(self) -> List[dict]:
-        """获取所有工具的 Schema 列表.
-
-        Returns:
-            用于传给 LLM 的 tools 定义列表.
-
-        """
-        return [tool.get_schema() for tool in self._tools.values()]
-
     def list_tools(self) -> List[str]:
         """列出所有已注册的工具名称.
 

@@ -312,8 +312,8 @@ class AICodingApp(App):
                 path = path[:27] + "..."
             return f"● {name}  {path}"
 
-        # Shell：截断长命令
-        if name == "Shell" and "command" in args:
+        # execute_command：截断长命令
+        if name == "execute_command" and "command" in args:
             cmd = str(args["command"]).strip()
             if len(cmd) > 40:
                 cmd = cmd[:40] + "..."

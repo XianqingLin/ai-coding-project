@@ -63,7 +63,7 @@ class EnvironmentInfo:
     date: str
 
     def to_dict(self) -> Dict[str, str]:
-        """返回所有字段的字典，用于格式化 default_system_prompt.txt 模板."""
+        """返回模板渲染所需的字段字典，用于格式化 default_system_prompt.txt."""
         return {
             "cwd": self.cwd,
             "date": self.date,

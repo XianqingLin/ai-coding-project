@@ -2,9 +2,6 @@
 
 import time
 
-import pytest
-
-from ai_coding.tools.shell_tools import ExecuteCommandTool
 from ai_coding.tools.task_tools import TaskListTool, TaskOutputTool, TaskStopTool
 
 
@@ -14,14 +11,6 @@ def _extract_task_id(result: str) -> str:
         if line.startswith("[后台任务已启动] "):
             return line.split("]", 1)[1].strip()
     raise ValueError(f"无法从结果中提取 task_id: {result!r}")
-
-
-@pytest.fixture
-def task_manager(isolated_work_dir):
-    """创建并配置 ExecuteCommandTool 作为任务管理器."""
-    tool = ExecuteCommandTool()
-    tool.set_work_dir(str(isolated_work_dir))
-    return tool
 
 
 class TestTaskListTool:
