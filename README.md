@@ -133,6 +133,52 @@ python scripts/run_single.py --task abs-module-cache-flags --step
 python scripts/run_single.py --task abs-module-cache-flags --prompt prompts/v2.txt
 ```
 
+### 端到端 Demo：让 Agent 给俄罗斯方块加 Hold 功能
+
+下面演示如何让 AI Coding 在真实代码库上完成需求分析、代码修改和测试验证。
+
+**任务**：给 `examples/tetris/tetris.py` 添加经典的 **Hold（暂存）方块** 功能，并更新测试脚本验证。
+
+**运行命令**：
+
+```bash
+cd examples/tetris
+PYTHONIOENCODING=utf-8 python -m ai_coding ask \
+  "给 tetris.py 添加一个 Hold（暂存）方块功能：按 C 键把当前方块暂存起来，再次按 C 键与已暂存的方块交换。首次暂存时直接生成下一个方块。在右侧信息区显示当前暂存的方块。更新 run_tetris_test.py 添加对 Hold 功能的测试。" \
+  --work-dir . --auto-approve
+```
+
+**Agent 自动完成的工作**：
+
+1. 读取 `examples/tetris/tetris.py` 和 `examples/tetris/run_tetris_test.py` 分析代码结构
+2. 在 `TetrisGame` 中新增 `hold_piece_name` 和 `can_hold` 状态
+3. 实现 `hold_piece()` 方法，处理首次暂存、交换暂存、锁定后重置等逻辑
+4. 在 `run()` 主循环中监听 `C`/`c` 键
+5. 在右侧信息区渲染当前暂存方块
+6. 更新帮助提示，添加 `C    暂存/交换`
+7. 在 `run_tetris_test.py` 中新增 4 项 Hold 功能测试
+8. 运行测试脚本验证全部通过
+
+**验证结果**：
+
+```
+[PASS] tetris.py 语法编译通过
+[PASS] 方块移动逻辑正常
+[PASS] 方块旋转逻辑正常
+[PASS] 边界碰撞检测正常
+[PASS] 消行逻辑正常
+[PASS] 所有7种方块均包含4格
+[PASS] 核心循环模拟完成
+[PASS] 首次暂存功能正常
+[PASS] 连续暂存被正确阻止
+[PASS] 交换暂存功能正常
+[PASS] 游戏结束/暂停时无法暂存
+
+结论: tetris.py 核心逻辑验证全部通过
+```
+
+> 💡 该 Demo 使用真实 LLM API 运行。如果你想离线复现，可以切换到 Mock 模式，但复杂多步修改建议使用 Kimi/OpenAI 以获得更稳定效果。
+
 ### 内置命令
 
 | 命令 | 功能 |
