@@ -16,6 +16,63 @@
 - 📝 **日志记录** — 自动记录操作日志到 `logs/` 目录
 - 🔌 **多模型支持** — 支持 Kimi (K2.6)、OpenAI、Mock 模式
 
+## 架构设计
+
+### 系统架构总览
+
+```mermaid
+graph TD
+    User[用户] --> CLI[CLI<br/>Typer]
+    User --> TUI[TUI<br/>Textual]
+    CLI --> AgentService[AgentService]
+    TUI --> AgentService
+    AgentService --> SessionManager[SessionManager<br/>多会话 + 持久化]
+    AgentService --> LangGraphAgent[LangGraphAgent<br/>ReAct 循环]
+    LangGraphAgent --> LLMNode[llm_node]
+    LangGraphAgent --> ToolsNode[tools_node]
+    LangGraphAgent --> ApprovalNode[approval_node]
+    LLMNode --> LLMFactory[LLM 工厂<br/>Kimi / OpenAI / Mock]
+    ToolsNode --> ToolRegistry[ToolRegistry<br/>文件 / Shell / Grep / 子Agent]
+    ApprovalNode --> UserApproval[用户审批]
+    ToolsNode --> Storage[StorageEngine<br/>状态持久化]
+    LangGraphAgent --> Compressor[ContextCompressor<br/>上下文压缩]
+    LangGraphAgent --> SubAgent[SubAgentManager<br/>子Agent协作]
+```
+
+### LangGraph 状态机
+
+```mermaid
+stateDiagram-v2
+    [*] --> llm_node: 用户输入
+    llm_node --> tools_node: 需要工具
+    llm_node --> approval_node: 写操作需审批
+    llm_node --> [*]: 直接回复
+    approval_node --> tools_node: 已授权
+    approval_node --> [*]: 拒绝 / 取消
+    tools_node --> llm_node: 执行结果
+    tools_node --> [*]: 完成 / 错误
+```
+
+### 核心模块职责
+
+| 模块 | 文件 | 职责 |
+|---|---|---|
+| **CLI / TUI** | `cli.py` / `tui/` | 用户交互入口，支持命令行与全屏终端界面 |
+| **AgentService** | `agent/service.py` | 对外统一服务接口，管理会话、消息、状态 |
+| **LangGraphAgent** | `agent/core.py` | 构建并运行 ReAct 状态图，协调 LLM、工具、审批节点 |
+| **图节点** | `agent/nodes/` | `llm_node` 调用模型，`tools_node` 执行工具，`approval_node` 进行权限审批 |
+| **工具系统** | `tools/` | 文件读写、Shell 执行、代码搜索、子 Agent 委派等 |
+| **LLM 工厂** | `llm/` | 封装 Kimi / OpenAI / Mock 三种模型 provider |
+| **持久化** | `persistence/` | AgentState、消息历史、执行记录的序列化与存储 |
+| **上下文压缩** | `agent/context_compressor.py` | 长对话时自动压缩上下文，控制 Token 开销 |
+| **子 Agent** | `agent/sub_agent_manager.py` | 支持 coder/explore/plan 角色与前后台任务委派 |
+
+### 安全机制
+
+- **路径沙箱**：所有文件操作通过 `tools/sandbox.py` 校验，禁止越界访问
+- **审批门控**：写操作必须经 `approval_node` 授权，支持 CLI/TUI 交互确认
+- **环境隔离**：每个会话独立工作目录，持久化数据按会话隔离存储
+
 ## 快速开始
 
 ### 环境要求
