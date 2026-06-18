@@ -431,7 +431,7 @@ class GrepTool(Tool):
         for _, line_no, line_text in results:
             if len(line_text) > self.MAX_LINE_LEN:
                 line_text = line_text[: self.MAX_LINE_LEN] + " ..."
-            lines.append(f"{filepath.replace(os.sep, '/' )}:{line_no} | {line_text}")
+            lines.append(f"{filepath.replace(os.sep, '/')}:{line_no} | {line_text}")
         return "\n".join(lines)
 
     def _search_file_lines(
