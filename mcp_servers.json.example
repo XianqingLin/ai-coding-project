@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "local_git": {
+      "command": "python",
+      "args": ["-m", "ai_coding.mcp.servers.git_server"],
+      "env": {}
+    }
+  }
+}

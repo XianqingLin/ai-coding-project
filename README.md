@@ -12,6 +12,7 @@
 - 🤖 **ReAct Agent 架构** — AI 能思考、决策、调用工具完成任务
 - ⚡ **流式输出** — AI 回复逐字实时显示，无需等待
 - 🛠️ **工具系统** — 读取/写入/编辑文件、列出目录、执行命令、代码搜索、Git 操作
+- 🔗 **MCP 协议支持** — 可接入外部 MCP Server，动态扩展工具生态
 - 🎨 **语法高亮** — 代码块自动高亮显示
 - 📝 **日志记录** — 自动记录操作日志到 `logs/` 目录
 - 🔌 **多模型支持** — 支持 Kimi (K2.6)、OpenAI、Mock 模式
@@ -20,9 +21,9 @@
 
 | 指标 | 数据 |
 |------|------|
-| 单元测试 | **357+** 用例，覆盖率 **85%** |
+| 单元测试 | **370+** 用例，覆盖率 **84%** |
 | 内置 Benchmark | **9** 个可量化任务（fibonacci / tetris / 5 个 architecture-stress） |
-| 工具数量 | **20+** 种（文件 / Shell / Git / 任务 / 计划 / 子 Agent 等） |
+| 工具数量 | **20+** 内置工具 + **MCP 外部工具动态接入** |
 | 模型支持 | Kimi / OpenAI / Mock 三种 Provider |
 | 架构 | LangGraph ReAct + 审批门控 + 路径沙箱 + 上下文压缩 |
 | 界面 | CLI + Textual 全屏 TUI |
@@ -236,6 +237,36 @@ PYTHONIOENCODING=utf-8 python -m ai_coding ask \
 
 > 💡 该 Demo 使用真实 LLM API 运行。如果你想离线复现，可以切换到 Mock 模式，但复杂多步修改建议使用 Kimi/OpenAI 以获得更稳定效果。
 
+### MCP（Model Context Protocol）扩展
+
+AI Coding 支持接入外部 MCP Server，将 MCP 暴露的工具动态转换为 Agent 可调用的内部工具。
+
+1. 复制示例配置：
+
+```bash
+cp mcp_servers.json.example mcp_servers.json
+```
+
+2. 按需编辑 `mcp_servers.json`，例如启用本地 Git MCP Server：
+
+```json
+{
+  "mcpServers": {
+    "local_git": {
+      "command": "python",
+      "args": ["-m", "ai_coding.mcp.servers.git_server"],
+      "env": {}
+    }
+  }
+}
+```
+
+3. 确保 `.env` 中 `MCP_ENABLED=true`（默认开启）。
+
+4. 启动 AI Coding 后，MCP 工具会以 `mcp_{server_name}_{tool_name}` 的格式出现在工具列表中，例如 `mcp_local_git_get_git_status`。
+
+> 单个 MCP Server 连接失败不会影响内置工具和其他 Server。
+
 ### 内置命令
 
 | 命令 | 功能 |
@@ -279,6 +310,9 @@ ai-coding/
 │       ├── llm/            # LLM 封装
 │       │   ├── kimi_chat.py    # KimiChatOpenAI（支持 reasoning_content）
 │       │   └── lc_llm.py       # LLM 工厂（Kimi/OpenAI/Mock）
+│       ├── mcp/            # MCP（Model Context Protocol）集成
+│       │   ├── client.py       # MCP Client 同步封装
+│       │   └── servers/        # 示例 MCP Server
 │       ├── persistence/    # 持久化存储
 │       │   ├── storage.py      # 存储引擎
 │       │   ├── serializer.py   # 状态序列化
