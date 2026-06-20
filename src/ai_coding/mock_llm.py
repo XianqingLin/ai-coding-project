@@ -4,7 +4,7 @@
 支持预设响应序列和交互式调试模式。
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 from langchain_core.messages import AIMessage, BaseMessage
 
@@ -139,15 +139,16 @@ class MockChatModel:
             content="[MockLLM] 预设回复序列已耗尽。请增加 responses 列表长度。"
         )
 
-    def stream(self, messages: List[BaseMessage], **kwargs: Any):
+    def stream(self, messages: List[BaseMessage], **kwargs: Any) -> Iterator[str]:
         """模拟流式输出.
 
         目前直接返回完整消息（非真正的逐字流式）.
 
         """
         msg = self.invoke(messages)
-        if msg.content:
-            yield msg.content
+        content = msg.content if isinstance(msg.content, str) else ""
+        if content:
+            yield content
 
     def _interactive_invoke(self, messages: List[BaseMessage]) -> AIMessage:
         """交互模式：暂停并等待人工输入模拟回复."""

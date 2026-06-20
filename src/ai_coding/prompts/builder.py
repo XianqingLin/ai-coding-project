@@ -101,7 +101,7 @@ class SystemPromptBuilder:
             FileNotFoundError: 当指定的资源文件不存在时.
         """
         path = files("ai_coding.prompts").joinpath(filename)
-        if not path.exists():
+        if not path.exists():  # type: ignore[attr-defined]
             raise FileNotFoundError(f"Prompt guideline file not found: {filename}")
         return path.read_text(encoding="utf-8")
 

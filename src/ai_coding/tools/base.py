@@ -70,7 +70,7 @@ class Tool(ABC):
         ...
 
     @abstractmethod
-    def execute(self, **kwargs) -> str:
+    def execute(self, **kwargs: Any) -> str:
         """执行工具逻辑.
 
         Args:
@@ -150,8 +150,6 @@ class Tool(ABC):
             LangChain 格式的工具实例.
 
         """
-        from typing import Optional
-
         from langchain_core.tools import StructuredTool
         from pydantic import Field, create_model
 
@@ -174,12 +172,14 @@ class Tool(ABC):
             else:
                 default = param.default if param.default is not None else None
                 fields[param.name] = (
-                    Optional[py_type],
+                    py_type,
                     Field(default=default, description=param.description),
                 )
 
         if fields:
-            ArgsSchema = create_model(f"{self.name.title()}Args", **fields)
+            ArgsSchema = create_model(
+                f"{self.name.title()}Args", **fields
+            )  # type: ignore[call-overload]
         else:
             ArgsSchema = create_model(f"{self.name.title()}Args")
 

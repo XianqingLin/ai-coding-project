@@ -3,16 +3,10 @@
 覆盖文件快照/任务列表上下文注入、子 Agent 结果通知、消息插入顺序等.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock
 
-import pytest
-from langchain_core.messages import (
-    AIMessage,
-    HumanMessage,
-    SystemMessage,
-    ToolMessage,
-)
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from ai_coding.agent.nodes.llm_node import (
     FILE_SNAPSHOT_MAX_LINES,
@@ -22,12 +16,11 @@ from ai_coding.agent.nodes.llm_node import (
     create_llm_node,
 )
 from ai_coding.agent.state import AgentState
-from ai_coding.agent.sub_agent_manager import SubAgentManager
 
 
 def _make_state(
     messages: List[Any],
-    file_snapshots: Dict[str, str] = None,
+    file_snapshots: Optional[Dict[str, str]] = None,
     todos: List[dict] = None,
     sub_agents: List[dict] = None,
 ) -> AgentState:
@@ -95,7 +88,9 @@ class TestBuildSubAgentHumanMessage:
         msg = _build_sub_agent_human_message(manager)
         assert msg.content == ""
 
-    def test_pending_results_formatted(self, clean_sub_agent_manager, isolated_work_dir):
+    def test_pending_results_formatted(
+        self, clean_sub_agent_manager, isolated_work_dir
+    ):
         manager = clean_sub_agent_manager
         from ai_coding.mock_llm import MockChatModel, mock_text
 

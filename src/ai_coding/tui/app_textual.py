@@ -247,6 +247,7 @@ class AICodingApp(App):
         """追加 assistant chunk 到当前占位符（流式中用纯文本）."""
         if self._last_assistant_widget is None:
             self._start_new_assistant_response()
+        assert self._last_assistant_widget is not None
         self._current_assistant_text += text
         # 流式过程中显示原始文本+进度指示，避免未闭合 Markdown 标记导致格式错乱
         self._last_assistant_widget.update(f"● {self._current_assistant_text}")
@@ -283,6 +284,7 @@ class AICodingApp(App):
         """追加 thinking chunk 到当前折叠面板."""
         if self._last_thinking_widget is None:
             self._start_new_thinking_response()
+        assert self._last_thinking_widget is not None
         self._current_thinking_text += text
         self._last_thinking_widget.update(self._current_thinking_text)
         history = self.query_one("#history", VerticalScroll)

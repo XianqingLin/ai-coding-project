@@ -61,7 +61,7 @@ class LangGraphAgent:
 
     def __init__(
         self,
-        llm=None,
+        llm: Optional[Any] = None,
         tools: Optional[List[Tool]] = None,
         max_iterations: int = 10,
         streaming: bool = True,
@@ -73,7 +73,7 @@ class LangGraphAgent:
         short_term_memory_budget: int = 100000,
         auto_approve: bool = False,
         work_dir: Optional[str] = None,
-        llm_factory=None,
+        llm_factory: Optional[Callable[[], Any]] = None,
         on_state_change: Optional[Callable[[], None]] = None,
         on_wire_event: Optional[Callable[[Dict[str, Any]], None]] = None,
         event_loop: Any = None,
@@ -153,13 +153,17 @@ class LangGraphAgent:
             f"流式: {streaming} | 会话: {self.thread_id}"
         )
 
-    def _build_graph(self):
+    def _build_graph(self) -> Any:
         """构建 ReAct 图结构：依赖注入节点工厂函数."""
+        if self.llm is None:
+            raise ValueError("LLM 未初始化，无法构建图")
         all_lc_tools = [t.to_langchain_tool() for t in self.tools]
         bound_llm = self.llm.bind_tools(all_lc_tools)
 
         builder = StateGraph(AgentState)
-        builder.add_node("llm", create_llm_node(llm=bound_llm))
+        builder.add_node(
+            "llm", create_llm_node(llm=bound_llm)
+        )  # type: ignore[call-overload]
         builder.add_node(
             "approval",
             create_approval_gate(
@@ -168,14 +172,14 @@ class LangGraphAgent:
                 event_loop=self.event_loop,
                 on_approval_request=self.on_approval_request,
                 register_approval_future=self.register_approval_future,
-            ),
+            ),  # type: ignore[call-overload]
         )
         builder.add_node(
             "tools",
             create_tools_node(
                 tool_registry=self.tool_registry,
                 on_edit_proposal=self._handle_edit_proposal,
-            ),
+            ),  # type: ignore[call-overload]
         )
 
         # 图拓扑：START -> LLM -> (条件) -> approval -> 工具 -> 回到 LLM
@@ -343,7 +347,7 @@ class LangGraphAgent:
 
         self._approval_futures[request_id] = future
 
-        def _cleanup(fut):
+        def _cleanup(fut: Any) -> None:
             # 仅当仍是当前注册的 future 时才清理，避免误删重放的注册
             if self._approval_futures.get(request_id) is fut:
                 self._approval_futures.pop(request_id, None)
@@ -499,9 +503,9 @@ class LangGraphAgent:
             try:
                 final_snapshot = self.graph.get_state(config)
                 if final_snapshot is not None and hasattr(final_snapshot, "values"):
-                    self.state = final_snapshot.values
+                    self.state = final_snapshot.values  # type: ignore[assignment]
                 elif isinstance(final_snapshot, dict):
-                    self.state = final_snapshot
+                    self.state = final_snapshot  # type: ignore[assignment]
                 if self._pending_assistant_text:
                     self._emit_wire_event(
                         {"type": "assistant", "text": self._pending_assistant_text}
@@ -633,9 +637,9 @@ class LangGraphAgent:
             try:
                 final_snapshot = self.graph.get_state(config)
                 if final_snapshot is not None and hasattr(final_snapshot, "values"):
-                    self.state = final_snapshot.values
+                    self.state = final_snapshot.values  # type: ignore[assignment]
                 elif isinstance(final_snapshot, dict):
-                    self.state = final_snapshot
+                    self.state = final_snapshot  # type: ignore[assignment]
                 if self.on_state_change:
                     try:
                         self.on_state_change()
@@ -734,7 +738,7 @@ class LangGraphAgent:
         if self.state:
             for msg in self.state.get("messages", []):
                 content = msg.content if hasattr(msg, "content") else ""
-                if content:
+                if isinstance(content, str) and content:
                     total_tokens += len(encoder.encode(content))
 
             # file_snapshots

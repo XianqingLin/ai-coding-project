@@ -72,7 +72,7 @@ class ExecuteCommandTool(Tool):
             ),
         ]
 
-    def execute(
+    def execute(  # type: ignore[override]
         self,
         command: str,
         cwd: Optional[str] = None,

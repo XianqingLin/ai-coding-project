@@ -6,7 +6,7 @@ Plan 模式下 Write/Edit 只允许操作计划文件，TaskStop 被拦截。
 
 import time
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, Optional
 
 from ai_coding.tools.base import Tool, ToolParameter
 
@@ -29,7 +29,7 @@ class EnterPlanModeTool(Tool):
     def parameters(self) -> List[ToolParameter]:
         return []
 
-    def execute(self) -> str:
+    def execute(self) -> str:  # type: ignore[override]
         plan_dir = Path(self.work_dir) / ".kimi" / "plans"
         plan_dir.mkdir(parents=True, exist_ok=True)
         ts = int(time.time())
@@ -72,7 +72,9 @@ class ExitPlanModeTool(Tool):
             ),
         ]
 
-    def execute(self, options: List[Any] = None) -> str:
+    def execute(  # type: ignore[override]
+        self, options: Optional[List[Any]] = None
+    ) -> str:
         validated = self._validate_options(options or [])
         if isinstance(validated, str) and validated.startswith("[错误]"):
             return validated

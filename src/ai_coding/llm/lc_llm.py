@@ -3,7 +3,9 @@
 根据提供商名称创建对应的 LangChain ChatOpenAI 实例.
 """
 
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 
 from ai_coding.config import (
     KIMI_API_KEY,
@@ -19,7 +21,7 @@ from ai_coding.logger import get_logger
 logger = get_logger(__name__)
 
 
-def create_lc_llm(provider: str = "kimi") -> ChatOpenAI:
+def create_lc_llm(provider: str = "kimi") -> BaseChatModel:
     """根据提供商名称创建 LangChain ChatOpenAI 实例.
 
     Args:
@@ -41,7 +43,7 @@ def create_lc_llm(provider: str = "kimi") -> ChatOpenAI:
         logger.info(f"创建 Kimi LLM | 模型: {KIMI_MODEL} | URL: {KIMI_BASE_URL}")
         return KimiChatOpenAI(
             model=KIMI_MODEL,
-            api_key=KIMI_API_KEY,
+            api_key=SecretStr(KIMI_API_KEY),
             base_url=KIMI_BASE_URL,
             temperature=1.0,
             streaming=True,
@@ -56,7 +58,7 @@ def create_lc_llm(provider: str = "kimi") -> ChatOpenAI:
         logger.info(f"创建 OpenAI LLM | 模型: {OPENAI_MODEL}")
         return ChatOpenAI(
             model=OPENAI_MODEL,
-            api_key=OPENAI_API_KEY,
+            api_key=SecretStr(OPENAI_API_KEY),
             base_url=OPENAI_BASE_URL,
             temperature=0.7,
             streaming=True,
@@ -66,7 +68,7 @@ def create_lc_llm(provider: str = "kimi") -> ChatOpenAI:
         from ai_coding.mock_llm import MockChatModel
 
         logger.info("创建 Mock LLM")
-        return MockChatModel()
+        return MockChatModel()  # type: ignore[return-value]
 
     else:
         raise ValueError(f"未知的 LLM 提供商: '{provider}'. 可选: kimi, openai, mock")

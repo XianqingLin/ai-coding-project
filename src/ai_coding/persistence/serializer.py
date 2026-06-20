@@ -4,7 +4,7 @@
 """
 
 import json
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, cast
 
 from langchain_core.messages import (
     AIMessage,
@@ -68,7 +68,7 @@ def _deserialize_message(data: dict) -> BaseMessage:
         k: v for k, v in data.items() if k in core_fields or not k.startswith("_")
     }
 
-    return cls(**kwargs)
+    return cast(BaseMessage, cls(**kwargs))
 
 
 def serialize_messages(messages: Sequence[BaseMessage]) -> List[dict]:

@@ -9,7 +9,7 @@ import glob
 import os
 import re
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from ai_coding.tools.base import Tool, ToolParameter
 
@@ -44,7 +44,9 @@ class ReadFileTool(Tool):
             ),
         ]
 
-    def execute(self, path: str, line_offset: int = 1, n_lines: int = 300) -> str:
+    def execute(  # type: ignore[override]
+        self, path: str, line_offset: int = 1, n_lines: int = 300
+    ) -> str:
         try:
             target = self._resolve_path(path, must_exist=True)
         except Exception as e:
@@ -115,7 +117,7 @@ class WriteFileTool(Tool):
             ToolParameter("content", "string", "要写入的文件内容"),
         ]
 
-    def execute(self, path: str, content: str) -> str:
+    def execute(self, path: str, content: str) -> str:  # type: ignore[override]
         try:
             target = self._resolve_path(path, must_exist=False)
         except Exception as e:
@@ -194,7 +196,9 @@ class EditFile(Tool):
 
         return best_match, best_ratio
 
-    def execute(self, path: str, old_string: str, new_string: str) -> str:
+    def execute(  # type: ignore[override]
+        self, path: str, old_string: str, new_string: str
+    ) -> str:
         try:
             target = self._resolve_path(path, must_exist=True)
         except Exception as e:
@@ -318,11 +322,11 @@ class GrepTool(Tool):
             ),
         ]
 
-    def execute(
+    def execute(  # type: ignore[override]
         self,
         pattern: str,
         path: str = ".",
-        glob: str = None,
+        glob: Optional[str] = None,
         output_mode: str = "content",
     ) -> str:
         try:
@@ -408,7 +412,7 @@ class GrepTool(Tool):
 
         return "\n".join(lines)
 
-    def _parse_glob(self, glob_str: str = None) -> List[str]:
+    def _parse_glob(self, glob_str: Optional[str] = None) -> List[str]:
         """解析 glob 字符串. 支持 '{a,b,c}' 语法."""
         if not glob_str:
             return []
@@ -470,7 +474,7 @@ class ListDirTool(Tool):
             ),
         ]
 
-    def execute(self, path: str = ".") -> str:
+    def execute(self, path: str = ".") -> str:  # type: ignore[override]
         try:
             target = self._resolve_path(path, must_exist=True)
         except Exception as e:
@@ -506,12 +510,13 @@ class ListDirTool(Tool):
             return f"[错误] 列出目录失败: {e}"
 
     @staticmethod
-    def _format_size(size: int) -> str:
+    def _format_size(size: float) -> str:
+        size_val = float(size)
         for unit in ["B", "KB", "MB"]:
-            if size < 1024:
-                return f"{size:.1f} {unit}"
-            size /= 1024
-        return f"{size:.1f} GB"
+            if size_val < 1024:
+                return f"{size_val:.1f} {unit}"
+            size_val /= 1024
+        return f"{size_val:.1f} GB"
 
 
 class GlobTool(Tool):
@@ -542,7 +547,7 @@ class GlobTool(Tool):
             ),
         ]
 
-    def execute(self, pattern: str, path: str = ".") -> str:
+    def execute(self, pattern: str, path: str = ".") -> str:  # type: ignore[override]
         try:
             target = self._resolve_path(path, must_exist=True)
         except Exception as e:

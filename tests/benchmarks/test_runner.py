@@ -6,14 +6,11 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from ai_coding.mock_llm import MockChatModel, mock_text, mock_tool_call
 from benchmarks.loader import load_task, load_tasks
 from benchmarks.runner import BenchmarkRunner
 
-
-SOLUTION_TEST_SCRIPT = '''\
+SOLUTION_TEST_SCRIPT = """\
 import py_compile
 import sys
 
@@ -28,7 +25,7 @@ except Exception as e:
 import solution
 assert solution.answer == 42, "answer should be 42"
 print("[PASS] solution ok")
-'''
+"""
 
 
 def _make_minimal_task(tmp_path: Path, prompt: str) -> Path:

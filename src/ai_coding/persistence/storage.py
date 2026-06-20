@@ -14,7 +14,7 @@ import json
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from ai_coding.logger import get_logger
 from ai_coding.persistence.config import get_storage_root
@@ -179,7 +179,9 @@ class StorageEngine:
             return None
         try:
             with self._lock:
-                return json.loads(path.read_text(encoding="utf-8"))
+                return cast(
+                    Dict[str, Any], json.loads(path.read_text(encoding="utf-8"))
+                )
         except Exception as e:
             logger.warning(f"加载会话元数据失败 [{session_id}]: {e}")
             return None

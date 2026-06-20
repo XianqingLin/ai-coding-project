@@ -1,6 +1,5 @@
 """AgentService 单元测试."""
 
-from typing import Any, Dict, List
 from unittest.mock import MagicMock
 
 import pytest
@@ -96,7 +95,9 @@ class TestAgentServiceMessaging:
         events = list(service.send_message_stream("hi"))
         assert isinstance(events[0], UserInputEvent)
 
-    def test_send_message_stream_returns_error_when_no_agent(self, service, monkeypatch):
+    def test_send_message_stream_returns_error_when_no_agent(
+        self, service, monkeypatch
+    ):
         monkeypatch.setattr(service, "_get_agent", lambda _=None: None)
         events = list(service.send_message_stream("hi"))
         assert isinstance(events[0], UserInputEvent)
@@ -110,9 +111,7 @@ class TestAgentServiceMessaging:
         monkeypatch.setattr(service, "_get_agent", lambda _=None: mock_agent)
         events = list(service.send_message_stream("hi"))
         assert any(
-            "不支持流式事件模式" in e.text
-            for e in events
-            if isinstance(e, ErrorEvent)
+            "不支持流式事件模式" in e.text for e in events if isinstance(e, ErrorEvent)
         )
 
     def test_send_message_stream_error(self, service):

@@ -61,7 +61,9 @@ class TodoTool(Tool):
             ),
         ]
 
-    def execute(self, action: str, task: str = "", index: Optional[int] = None) -> str:
+    def execute(  # type: ignore[override]
+        self, action: str, task: str = "", index: Optional[int] = None
+    ) -> str:
         action = action.lower().strip()
 
         if action == "add":
@@ -89,6 +91,8 @@ class TodoTool(Tool):
                 lines.append(f"  {mark} {i}. {t['task']}")
             lines.append(f"\n进度: {done_count}/{len(self._todos)} 已完成")
             return "\n".join(lines)
+
+        return f"[错误] 未知的 action: {action}"
 
     def _mark_done(self, task: str = "", index: Optional[int] = None) -> str:
         """标记任务为已完成."""

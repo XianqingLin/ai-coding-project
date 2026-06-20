@@ -8,9 +8,10 @@
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, cast
 
 from ai_coding.agent.core import LangGraphAgent
+from ai_coding.agent.state import AgentState
 from ai_coding.logger import get_logger
 from ai_coding.persistence import StorageEngine, state_from_json, state_to_json
 from ai_coding.persistence.storage import _work_dir_key
@@ -141,7 +142,7 @@ class SessionManager:
             state_text = self.storage.load_state(self.work_dir, sid)
             if state_text:
                 try:
-                    agent.state = state_from_json(state_text)
+                    agent.state = cast(AgentState, state_from_json(state_text))
                     logger.info(f"会话 [{sid}] AgentState 已恢复")
                 except Exception as e:
                     logger.warning(f"会话 [{sid}] AgentState 恢复失败: {e}")
@@ -219,7 +220,7 @@ class SessionManager:
             auto_approve=self.auto_approve,
             work_dir=self.work_dir,
             llm_factory=self.llm_factory,
-            on_state_change=lambda: self.save_state(),
+            on_state_change=lambda: (self.save_state(), None)[1],
             event_loop=event_loop,
             on_approval_request=on_approval_request,
             on_edit_proposal=on_edit_proposal,
@@ -403,7 +404,7 @@ class SessionManager:
             return False
         session = self.sessions[sid]
         try:
-            state_text = state_to_json(session.agent.state)
+            state_text = state_to_json(cast(Dict[str, Any], session.agent.state))
             self.storage.save_state(self.work_dir, sid, state_text)
             self._save_session_meta(
                 session, is_current=(sid == self.current_session_id)

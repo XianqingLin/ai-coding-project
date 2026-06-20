@@ -1,9 +1,5 @@
 """配置管理模块测试."""
 
-import os
-
-import pytest
-
 from ai_coding import config as config_module
 
 

@@ -1,6 +1,6 @@
 """工具系统基类测试."""
 
-from typing import Any, Dict, List
+from typing import List
 
 import pytest
 from langchain_core.tools import StructuredTool
@@ -47,11 +47,7 @@ class _EnumParamTool(Tool):
 
     @property
     def parameters(self) -> List[ToolParameter]:
-        return [
-            ToolParameter(
-                "mode", "string", "模式", enum=["fast", "slow"]
-            )
-        ]
+        return [ToolParameter("mode", "string", "模式", enum=["fast", "slow"])]
 
     def execute(self, mode: str) -> str:
         return mode

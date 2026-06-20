@@ -38,10 +38,10 @@ class AskUserQuestionTool(Tool):
             ),
         ]
 
-    def execute(
+    def execute(  # type: ignore[override]
         self,
         question: str = "",
-        options: List[Any] = None,
+        options: Optional[List[Any]] = None,
         multi_select: bool = False,
     ) -> str:
         if not question:
@@ -202,7 +202,7 @@ class AgentTool(Tool):
             ),
         ]
 
-    def execute(
+    def execute(  # type: ignore[override]
         self,
         prompt: str = "",
         description: str = "",

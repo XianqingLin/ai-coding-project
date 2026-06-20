@@ -116,7 +116,7 @@ def _prompt_plan_approval(plan_content: str, options: List[Dict[str, str]]) -> s
 def create_tools_node(
     tool_registry: ToolRegistry,
     on_edit_proposal: Optional[Callable[[Dict[str, Any]], None]] = None,
-):
+) -> Callable[[AgentState], Dict[str, Any]]:
     """创建 Tools 节点函数.
 
     Args:
@@ -162,7 +162,7 @@ def create_tools_node(
         except Exception:
             logger.debug("edit_proposal 回调失败", exc_info=True)
 
-    def tools_node(state: AgentState):
+    def tools_node(state: AgentState) -> Dict[str, Any]:
         """执行工具调用并更新文件快照和任务列表."""
         last_msg = state["messages"][-1]
         if not isinstance(last_msg, AIMessage) or not last_msg.tool_calls:
@@ -198,7 +198,7 @@ def create_tools_node(
                         if not k.startswith("_"):
                             old[k] = v
 
-        tool_messages = []
+        tool_messages: List[ToolMessage] = []
         file_snapshots: Dict[str, str] = {}
         updated_todos: List[dict] = []
         updated_bg_tasks: List[dict] = []
@@ -222,17 +222,25 @@ def create_tools_node(
             if plan_mode and name in ("write_file", "edit_file"):
                 target = args.get("path", "")
                 if target != plan_file_path:
-                    msg = (
-                        f"[错误] Plan 模式下只能修改计划文件 '{plan_file_path}'，"
-                        f"不允许写入 '{target}'"
+                    tool_messages.append(
+                        ToolMessage(
+                            content=(
+                                f"[错误] Plan 模式下只能修改计划文件 '{plan_file_path}'，"
+                                f"不允许写入 '{target}'"
+                            ),
+                            tool_call_id=tool_id,
+                        )
                     )
-                    tool_messages.append(ToolMessage(content=msg, tool_call_id=tool_id))
                     logger.warning(f"[PlanMode] 拦截 {name} 到非计划文件: {target}")
                     continue
 
             if plan_mode and name == "task_stop":
-                msg = "[错误] Plan 模式下不能使用 task_stop 工具"
-                tool_messages.append(ToolMessage(content=msg, tool_call_id=tool_id))
+                tool_messages.append(
+                    ToolMessage(
+                        content="[错误] Plan 模式下不能使用 task_stop 工具",
+                        tool_call_id=tool_id,
+                    )
+                )
                 logger.warning("[PlanMode] 拦截 task_stop")
                 continue
 
@@ -252,8 +260,12 @@ def create_tools_node(
             # ---------- exit_plan_mode 特殊处理 ----------
             if name == "exit_plan_mode":
                 if not plan_mode:
-                    msg = "[错误] 当前不在 Plan 模式中"
-                    tool_messages.append(ToolMessage(content=msg, tool_call_id=tool_id))
+                    tool_messages.append(
+                        ToolMessage(
+                            content="[错误] 当前不在 Plan 模式中",
+                            tool_call_id=tool_id,
+                        )
+                    )
                     continue
 
                 # 读取计划文件内容
@@ -283,27 +295,29 @@ def create_tools_node(
                 if choice == "approve":
                     plan_mode = False
                     plan_file_path = ""
-                    msg = "[成功] 计划已批准，已退出 Plan 模式。现在可以执行计划中的操作。"
+                    plan_msg = "[成功] 计划已批准，已退出 Plan 模式。现在可以执行计划中的操作。"
                     logger.info("[PlanMode] 用户批准计划，已退出 Plan 模式")
                 elif choice == "reject":
-                    msg = "[系统] 用户拒绝了计划。请根据反馈修改计划后重试。"
+                    plan_msg = "[系统] 用户拒绝了计划。请根据反馈修改计划后重试。"
                     logger.info("[PlanMode] 用户拒绝计划，保持 Plan 模式")
                 elif choice == "reject_and_exit":
                     plan_mode = False
                     plan_file_path = ""
-                    msg = "[系统] 用户拒绝了计划并退出 Plan 模式。"
+                    plan_msg = "[系统] 用户拒绝了计划并退出 Plan 模式。"
                     logger.info("[PlanMode] 用户拒绝并退出 Plan 模式")
                 elif choice == "revise":
-                    msg = "[系统] 用户要求修改计划。请根据反馈修改计划文件后重试。"
+                    plan_msg = "[系统] 用户要求修改计划。请根据反馈修改计划文件后重试。"
                     logger.info("[PlanMode] 用户要求修改计划，保持 Plan 模式")
                 else:
                     # 用户选择了某个 option
                     plan_mode = False
                     plan_file_path = ""
-                    msg = f"[成功] 用户选择了方案 '{choice}'，已退出 Plan 模式。请按该方案执行。"
+                    plan_msg = f"[成功] 用户选择了方案 '{choice}'，已退出 Plan 模式。请按该方案执行。"
                     logger.info(f"[PlanMode] 用户选择方案 '{choice}'，已退出 Plan 模式")
 
-                tool_messages.append(ToolMessage(content=msg, tool_call_id=tool_id))
+                tool_messages.append(
+                    ToolMessage(content=plan_msg, tool_call_id=tool_id)
+                )
                 continue
 
             # ---------- ask_user_question 特殊处理 ----------

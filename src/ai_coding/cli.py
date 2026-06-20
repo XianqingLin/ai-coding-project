@@ -43,7 +43,7 @@ def ask(
         False, "--auto-approve", "-a", help="自动批准工具调用"
     ),
     session: Optional[str] = typer.Option(None, "--session", "-s", help="指定会话 ID"),
-):
+) -> None:
     """向 Agent 发送一次性指令并打印回复."""
     setup_logging()
     work_dir = _resolve_work_dir(work_dir)
@@ -64,7 +64,7 @@ def chat(
     auto_approve: bool = typer.Option(
         False, "--auto-approve", "-a", help="自动批准工具调用"
     ),
-):
+) -> None:
     """启动交互式聊天会话（固定为流式+verbose 模式）."""
     setup_logging()
     work_dir = _resolve_work_dir(work_dir)
@@ -77,7 +77,7 @@ def chat(
 @session_app.command("list")
 def session_list(
     work_dir: str = typer.Option(".", "--work-dir", "-w", help="项目工作目录"),
-):
+) -> None:
     """列出所有会话."""
     work_dir = _resolve_work_dir(work_dir)
     service = _create_service(work_dir)
@@ -96,7 +96,7 @@ def session_list(
 def session_new(
     name: str = typer.Argument("default", help="会话名称"),
     work_dir: str = typer.Option(".", "--work-dir", "-w", help="项目工作目录"),
-):
+) -> None:
     """创建新会话."""
     work_dir = _resolve_work_dir(work_dir)
     service = _create_service(work_dir)
@@ -108,7 +108,7 @@ def session_new(
 def session_switch(
     session_id: str = typer.Argument(..., help="要切换到的会话 ID"),
     work_dir: str = typer.Option(".", "--work-dir", "-w", help="项目工作目录"),
-):
+) -> None:
     """切换到指定会话."""
     work_dir = _resolve_work_dir(work_dir)
     service = _create_service(work_dir)
@@ -123,7 +123,7 @@ def session_switch(
 def session_delete(
     session_id: str = typer.Argument(..., help="要删除的会话 ID"),
     work_dir: str = typer.Option(".", "--work-dir", "-w", help="项目工作目录"),
-):
+) -> None:
     """删除指定会话."""
     work_dir = _resolve_work_dir(work_dir)
     service = _create_service(work_dir)

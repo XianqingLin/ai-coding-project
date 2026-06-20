@@ -26,6 +26,12 @@ def _load_arch_task(name: str):
 def test_rename_function_task_solvable() -> None:
     task = _load_arch_task("rename_function")
 
+    main_content = (
+        "from utils import new_name\n\n\ndef run():\n"
+        "    return new_name(5)\n\n\n"
+        'if __name__ == "__main__":\n'
+        "    print(run())\n"
+    )
     responses = [
         mock_tool_call(
             "write_file",
@@ -37,10 +43,7 @@ def test_rename_function_task_solvable() -> None:
         ),
         mock_tool_call(
             "write_file",
-            {
-                "path": "main.py",
-                "content": "from utils import new_name\n\n\ndef run():\n    return new_name(5)\n\n\nif __name__ == \"__main__\":\n    print(run())\n",
-            },
+            {"path": "main.py", "content": main_content},
             content="update import in main",
         ),
         mock_text("Done."),
@@ -87,13 +90,24 @@ def test_fix_bug_task_solvable() -> None:
 def test_long_file_edit_task_solvable() -> None:
     task = _load_arch_task("long_file_edit")
 
+    old_string = (
+        "def process_data(data):\n"
+        '    """Return a list where each element is doubled."""\n'
+        "    # FIXME: currently returns unchanged data\n"
+        "    return data"
+    )
+    new_string = (
+        "def process_data(data):\n"
+        '    """Return a list where each element is doubled."""\n'
+        "    return [x * 2 for x in data]"
+    )
     responses = [
         mock_tool_call(
             "edit_file",
             {
                 "path": "data_processor.py",
-                "old_string": "def process_data(data):\n    \"\"\"Return a list where each element is doubled.\"\"\"\n    # FIXME: currently returns unchanged data\n    return data",
-                "new_string": "def process_data(data):\n    \"\"\"Return a list where each element is doubled.\"\"\"\n    return [x * 2 for x in data]",
+                "old_string": old_string,
+                "new_string": new_string,
             },
             content="fix process_data",
         ),

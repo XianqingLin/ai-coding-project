@@ -98,7 +98,9 @@ class TestReadFileTool:
 
     def test_read_over_1000_lines(self, read_tool, isolated_work_dir):
         file_path = isolated_work_dir / "many.txt"
-        file_path.write_text("\n".join(f"line{i}" for i in range(1500)), encoding="utf-8")
+        file_path.write_text(
+            "\n".join(f"line{i}" for i in range(1500)), encoding="utf-8"
+        )
 
         result = read_tool.execute("many.txt")
         assert "超过 1000 行" in result

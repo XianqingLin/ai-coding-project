@@ -3,7 +3,6 @@
 import re
 import sys
 from pathlib import Path
-from unittest.mock import patch
 
 from ai_coding.agent.service import AgentService
 from ai_coding.environment import (

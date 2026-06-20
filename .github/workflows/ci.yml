@@ -38,8 +38,6 @@ jobs:
         run: flake8 src tests
 
       - name: Type check with mypy
-        # 当前代码库存在历史遗留类型注解问题，先以非阻塞方式运行，后续逐步修复
-        continue-on-error: true
         run: mypy src
 
       - name: Run tests with pytest

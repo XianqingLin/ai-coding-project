@@ -330,9 +330,7 @@ class TestSubAgentManagerResume:
         )
         assert "实例不存在" in result
 
-    def test_resume_with_llm_factory(
-        self, clean_sub_agent_manager, isolated_work_dir
-    ):
+    def test_resume_with_llm_factory(self, clean_sub_agent_manager, isolated_work_dir):
         """唤回时通过 llm_factory 提供新 LLM."""
         manager = clean_sub_agent_manager
         llm = MockChatModel(responses=[mock_text("first")])

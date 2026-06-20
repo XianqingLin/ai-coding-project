@@ -4,6 +4,8 @@
 LangChain 的 ChatOpenAI 不自动解析此字段, 需手动拦截.
 """
 
+from typing import Any, Optional
+
 import openai
 from langchain_core.messages import AIMessageChunk
 from langchain_core.outputs import ChatGenerationChunk, ChatResult
@@ -28,7 +30,9 @@ class KimiChatOpenAI(ChatOpenAI):
 
     """
 
-    def _get_request_payload(self, input_, *, stop=None, **kwargs):
+    def _get_request_payload(
+        self, input_: Any, *, stop: Optional[Any] = None, **kwargs: Any
+    ) -> Any:
         """重写请求 payload 构建, 注入 reasoning_content."""
         payload = super()._get_request_payload(input_, stop=stop, **kwargs)
 
@@ -55,10 +59,9 @@ class KimiChatOpenAI(ChatOpenAI):
         """
         result = super()._create_chat_result(response, generation_info)
 
-        if isinstance(response, openai.BaseModel) and getattr(
-            response, "choices", None
-        ):
-            for i, choice in enumerate(response.choices):
+        choices = getattr(response, "choices", None)
+        if isinstance(response, openai.BaseModel) and choices:
+            for i, choice in enumerate(choices):
                 if i >= len(result.generations):
                     break
                 msg = choice.message

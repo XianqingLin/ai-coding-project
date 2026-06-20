@@ -15,12 +15,12 @@ from ai_coding.tools.sandbox import (
 class TestResolveSandboxedPath:
     def test_resolves_relative_path(self, isolated_work_dir):
         result = resolve_sandboxed_path("foo.txt", str(isolated_work_dir))
-        assert result == isolated_work_dir / "foo.txt"
+        assert result.resolve() == (isolated_work_dir / "foo.txt").resolve()
 
     def test_resolves_absolute_path_within_work_dir(self, isolated_work_dir):
         abs_path = str(isolated_work_dir / "foo.txt")
         result = resolve_sandboxed_path(abs_path, str(isolated_work_dir))
-        assert result == isolated_work_dir / "foo.txt"
+        assert result.resolve() == (isolated_work_dir / "foo.txt").resolve()
 
     def test_rejects_absolute_path_when_disabled(self, isolated_work_dir):
         abs_path = str(isolated_work_dir / "foo.txt")
@@ -50,7 +50,9 @@ class TestResolveSandboxedPath:
         assert result.exists()
 
         with pytest.raises(ValueError, match="路径不存在"):
-            resolve_sandboxed_path("missing.txt", str(isolated_work_dir), must_exist=True)
+            resolve_sandboxed_path(
+                "missing.txt", str(isolated_work_dir), must_exist=True
+            )
 
     def test_invalid_work_dir(self):
         with pytest.raises(ValueError, match="工作目录无效"):
@@ -59,7 +61,7 @@ class TestResolveSandboxedPath:
     def test_empty_work_dir_uses_cwd(self, isolated_work_dir, monkeypatch):
         monkeypatch.setattr(os, "getcwd", lambda: str(isolated_work_dir))
         result = resolve_sandboxed_path("foo.txt", "")
-        assert result == isolated_work_dir / "foo.txt"
+        assert result.resolve() == (isolated_work_dir / "foo.txt").resolve()
 
 
 class TestResolveSandboxedCwd:

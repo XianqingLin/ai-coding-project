@@ -3,6 +3,8 @@
 提供 LangGraph 的条件跳转逻辑.
 """
 
+from typing import Callable
+
 from langchain_core.messages import AIMessage
 from langgraph.graph import END
 
@@ -10,7 +12,9 @@ from ai_coding.agent.state import AgentState
 from ai_coding.tools.base import ToolRegistry
 
 
-def create_should_continue(tool_registry: ToolRegistry, auto_approve: bool = False):
+def create_should_continue(
+    tool_registry: ToolRegistry, auto_approve: bool = False
+) -> Callable[[AgentState], str]:
     """创建条件判断函数：Agent 节点输出后是否需要调用工具，以及是否需要授权.
 
     Args:
@@ -21,7 +25,7 @@ def create_should_continue(tool_registry: ToolRegistry, auto_approve: bool = Fal
         符合 LangGraph conditional_edges 签名的 callable.
     """
 
-    def should_continue(state: AgentState):
+    def should_continue(state: AgentState) -> str:
         """判断是否需要继续调用工具，以及是否需要先经过授权."""
         last_msg = state["messages"][-1]
         if not isinstance(last_msg, AIMessage) or not last_msg.tool_calls:

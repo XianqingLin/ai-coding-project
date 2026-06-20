@@ -1,6 +1,6 @@
 """Agent 节点内部共享工具函数."""
 
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 
 def normalize_tool_args(args: Any) -> Dict[str, Any]:
@@ -15,9 +15,9 @@ def normalize_tool_args(args: Any) -> Dict[str, Any]:
     if args is None:
         return {}
     if hasattr(args, "model_dump"):
-        return args.model_dump()
+        return cast(Dict[str, Any], args.model_dump())
     if hasattr(args, "dict"):
-        return args.dict()
+        return cast(Dict[str, Any], args.dict())
     if isinstance(args, dict):
         return args
     try:

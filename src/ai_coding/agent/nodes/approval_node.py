@@ -32,8 +32,10 @@ def create_approval_gate(
     interactive: bool = True,
     event_loop: Optional[Any] = None,
     on_approval_request: Optional[Callable[[Dict[str, Any]], None]] = None,
-    register_approval_future: Optional[Callable[[str, Future], None]] = None,
-):
+    register_approval_future: Optional[
+        Callable[[str, Future[str]], Future[str]]
+    ] = None,
+) -> Callable[[AgentState], Dict[str, Any]]:
     """创建 Approval Gate 节点函数.
 
     检查 LLM 输出的 tool_calls 中是否有需要用户授权的调用。
@@ -49,7 +51,7 @@ def create_approval_gate(
         符合 LangGraph 节点签名的 callable.
     """
 
-    def approval_gate(state: AgentState):
+    def approval_gate(state: AgentState) -> Dict[str, Any]:
         """拦截需要授权的 tool_calls，生成拒绝消息或更新授权集合."""
         last_msg = state["messages"][-1]
         if not isinstance(last_msg, AIMessage) or not last_msg.tool_calls:

@@ -64,7 +64,9 @@ class TestLangGraphAgent:
         """run_stream_verbose 输出 tool_call 和 observation 事件."""
         llm = MockChatModel(
             responses=[
-                mock_tool_call("list_dir", {"path": "."}, content="调用工具", call_id="tc1"),
+                mock_tool_call(
+                    "list_dir", {"path": "."}, content="调用工具", call_id="tc1"
+                ),
                 mock_text("done"),
             ]
         )
@@ -91,7 +93,9 @@ class TestLangGraphAgent:
         agent = LangGraphAgent(llm=BadLLM(), tools=[])
         events = list(agent.run_stream_verbose("hi"))
 
-        assert any("boom" in e.get("text", "") for e in events if e.get("type") == "error")
+        assert any(
+            "boom" in e.get("text", "") for e in events if e.get("type") == "error"
+        )
 
     def test_clear_history(self):
         llm = MockChatModel(responses=[mock_text("reply")])

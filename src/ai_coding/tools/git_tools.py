@@ -44,9 +44,9 @@ class GitToolBase(Tool):
     def _resolve_cwd(self, cwd: Optional[str]) -> str:
         """解析并校验工作目录位于沙箱内."""
         if cwd is None:
-            return resolve_sandboxed_cwd(None, self.work_dir)
+            return str(resolve_sandboxed_cwd(None, self.work_dir))
         try:
-            return resolve_sandboxed_cwd(cwd, self.work_dir)
+            return str(resolve_sandboxed_cwd(cwd, self.work_dir))
         except SandboxViolationError as e:
             raise SandboxViolationError(str(e)) from e
 
@@ -122,7 +122,7 @@ class GitStatusTool(GitToolBase):
             ),
         ]
 
-    def execute(self, cwd: Optional[str] = None) -> str:
+    def execute(self, cwd: Optional[str] = None) -> str:  # type: ignore[override]
         return self._run_git(["status", "--porcelain=v1", "-uall"], cwd=cwd)
 
 
@@ -159,7 +159,7 @@ class GitDiffTool(GitToolBase):
             ),
         ]
 
-    def execute(
+    def execute(  # type: ignore[override]
         self,
         cached: bool = False,
         path: Optional[str] = None,
@@ -209,7 +209,7 @@ class GitLogTool(GitToolBase):
             ),
         ]
 
-    def execute(
+    def execute(  # type: ignore[override]
         self,
         limit: int = 20,
         since: Optional[str] = None,
@@ -241,7 +241,7 @@ class GitBranchListTool(GitToolBase):
             ),
         ]
 
-    def execute(self, cwd: Optional[str] = None) -> str:
+    def execute(self, cwd: Optional[str] = None) -> str:  # type: ignore[override]
         return self._run_git(["branch", "--list"], cwd=cwd)
 
 
@@ -273,7 +273,7 @@ class GitBranchCreateTool(GitToolBase):
             ),
         ]
 
-    def execute(
+    def execute(  # type: ignore[override]
         self,
         branch: str,
         base: Optional[str] = None,
@@ -316,7 +316,7 @@ class GitBranchSwitchTool(GitToolBase):
             ),
         ]
 
-    def execute(
+    def execute(  # type: ignore[override]
         self,
         branch: str,
         create: bool = False,
@@ -357,7 +357,9 @@ class GitAddTool(GitToolBase):
             ),
         ]
 
-    def execute(self, paths: str, cwd: Optional[str] = None) -> str:
+    def execute(  # type: ignore[override]
+        self, paths: str, cwd: Optional[str] = None
+    ) -> str:
         if not paths.strip():
             return "[错误] paths 参数不能为空"
         raw_paths = [p.strip() for p in paths.replace(",", " ").split() if p.strip()]
@@ -387,7 +389,9 @@ class GitCommitTool(GitToolBase):
             ),
         ]
 
-    def execute(self, message: str, cwd: Optional[str] = None) -> str:
+    def execute(  # type: ignore[override]
+        self, message: str, cwd: Optional[str] = None
+    ) -> str:
         if not message.strip():
             return "[错误] 提交信息不能为空"
         return self._run_git(
@@ -431,7 +435,7 @@ class GitPushTool(GitToolBase):
             ),
         ]
 
-    def execute(
+    def execute(  # type: ignore[override]
         self,
         remote: str = "origin",
         branch: Optional[str] = None,

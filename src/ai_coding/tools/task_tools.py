@@ -44,7 +44,9 @@ class TaskListTool(Tool):
             ),
         ]
 
-    def execute(self, active_only: bool = True, limit: int = 20) -> str:
+    def execute(  # type: ignore[override]
+        self, active_only: bool = True, limit: int = 20
+    ) -> str:
         limit = max(1, min(100, int(limit)))
         tasks = self._task_manager.list_tasks(active_only=active_only, limit=limit)
 
@@ -99,7 +101,9 @@ class TaskOutputTool(Tool):
             ),
         ]
 
-    def execute(self, task_id: str, block: bool = False, timeout: int = 30) -> str:
+    def execute(  # type: ignore[override]
+        self, task_id: str, block: bool = False, timeout: int = 30
+    ) -> str:
         timeout = max(0, min(3600, int(timeout)))
 
         if block:
@@ -170,5 +174,7 @@ class TaskStopTool(Tool):
             ),
         ]
 
-    def execute(self, task_id: str, reason: str = "Stopped by TaskStop") -> str:
+    def execute(  # type: ignore[override]
+        self, task_id: str, reason: str = "Stopped by TaskStop"
+    ) -> str:
         return self._task_manager.stop_task(task_id, reason)

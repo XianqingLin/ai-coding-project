@@ -88,7 +88,7 @@ class TestMockChatModelInteractive:
 
     def test_interactive_tool_response(self, monkeypatch):
         monkeypatch.setattr(
-            "builtins.input", lambda _: "tool:read_file {\"path\": \"x.py\"}"
+            "builtins.input", lambda _: 'tool:read_file {"path": "x.py"}'
         )
         llm = MockChatModel(interactive=True)
 

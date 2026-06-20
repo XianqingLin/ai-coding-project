@@ -123,7 +123,8 @@ class ContextCompressor:
         recent_files = set()
         for msg in recent:
             if isinstance(msg, ToolMessage):
-                path = self._extract_read_file_path(msg.content)
+                content = msg.content if isinstance(msg.content, str) else ""
+                path = self._extract_read_file_path(content)
                 if path:
                     recent_files.add(path)
         older = self._deduplicate_file_reads(older, recent_files)
@@ -216,7 +217,8 @@ class ContextCompressor:
 
         for msg in reversed(messages):
             if isinstance(msg, ToolMessage):
-                path = self._extract_read_file_path(msg.content)
+                content = msg.content if isinstance(msg.content, str) else ""
+                path = self._extract_read_file_path(content)
                 if path and path in seen_files:
                     continue  # 跳过重复
                 if path:
@@ -248,7 +250,7 @@ class ContextCompressor:
 
         对于 read_file 结果，只保留元信息，具体内容由 file_snapshots 提供.
         """
-        content = msg.content or ""
+        content = msg.content if isinstance(msg.content, str) else ""
         lines = content.split("\n")
         total_lines = len(lines)
 
@@ -365,13 +367,15 @@ class ContextCompressor:
             # 无 tiktoken 时按字符粗略估算
             total = 0
             for msg in messages:
-                content = msg.content if hasattr(msg, "content") else ""
+                raw_content = msg.content if hasattr(msg, "content") else ""
+                content = raw_content if isinstance(raw_content, str) else ""
                 total += len(content) // 4  # 粗略 4 字符 ≈ 1 token
             return total
 
         total = 0
         for msg in messages:
-            content = msg.content if hasattr(msg, "content") else ""
+            raw_content = msg.content if hasattr(msg, "content") else ""
+            content = raw_content if isinstance(raw_content, str) else ""
             if content:
                 total += len(self._encoder.encode(content))
         return total

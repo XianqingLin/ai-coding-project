@@ -4,13 +4,12 @@
 """
 
 from typing import List, Optional
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import openai
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
-from pydantic import BaseModel
 
 from ai_coding.llm.kimi_chat import KimiChatOpenAI
 
@@ -99,7 +98,13 @@ class TestCreateChatResult:
     def test_extracts_reasoning_content(self, kimi):
         """从 openai BaseModel 响应中提取 reasoning_content 注入 ChatResult."""
         response = FakeChatCompletion(
-            choices=[FakeChoice(message=FakeReasoningMessage(reasoning_content="step by step thinking"))]
+            choices=[
+                FakeChoice(
+                    message=FakeReasoningMessage(
+                        reasoning_content="step by step thinking"
+                    )
+                )
+            ]
         )
 
         # 构造父类返回的 ChatResult
@@ -111,9 +116,10 @@ class TestCreateChatResult:
         ):
             result = kimi._create_chat_result(response)
 
-        assert result.generations[0].message.additional_kwargs.get(
-            "reasoning_content"
-        ) == "step by step thinking"
+        assert (
+            result.generations[0].message.additional_kwargs.get("reasoning_content")
+            == "step by step thinking"
+        )
 
     def test_no_reasoning_content(self, kimi):
         """响应中没有 reasoning_content 时不添加."""
@@ -129,12 +135,16 @@ class TestCreateChatResult:
         ):
             result = kimi._create_chat_result(response)
 
-        assert "reasoning_content" not in result.generations[0].message.additional_kwargs
+        assert (
+            "reasoning_content" not in result.generations[0].message.additional_kwargs
+        )
 
     def test_response_without_choices(self, kimi):
         """choices 为空时不报错."""
         response = FakeChatCompletion(choices=[])
-        chat_result = ChatResult(generations=[ChatGeneration(message=AIMessage(content="ok"))])
+        chat_result = ChatResult(
+            generations=[ChatGeneration(message=AIMessage(content="ok"))]
+        )
 
         with patch.object(
             type(kimi).__bases__[0], "_create_chat_result", return_value=chat_result
@@ -175,7 +185,10 @@ class TestConvertChunkToGenerationChunk:
                 raw_chunk, ChatGenerationChunk, None
             )
 
-        assert result.message.additional_kwargs.get("reasoning_content") == "stream reasoning"
+        assert (
+            result.message.additional_kwargs.get("reasoning_content")
+            == "stream reasoning"
+        )
 
     def test_returns_none_when_parent_returns_none(self, kimi):
         """父类返回 None 时直接返回 None."""
@@ -232,11 +245,7 @@ class TestConvertChunkToGenerationChunk:
         parent_chunk = ChatGenerationChunk(message=chunk_msg)
 
         raw_chunk = {
-            "chunk": {
-                "choices": [
-                    {"delta": {"reasoning_content": "nested reasoning"}}
-                ]
-            }
+            "chunk": {"choices": [{"delta": {"reasoning_content": "nested reasoning"}}]}
         }
 
         with patch.object(

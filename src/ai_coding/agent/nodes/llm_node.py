@@ -5,7 +5,7 @@
 """
 
 import time
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING, Any, Callable, Dict, List
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -82,7 +82,7 @@ def _build_todo_context_message(todos: List[dict]) -> SystemMessage:
     return SystemMessage(content="\n".join(lines))
 
 
-def create_llm_node(llm: "BaseChatModel"):
+def create_llm_node(llm: "BaseChatModel") -> Callable[[AgentState], Dict[str, Any]]:
     """创建 LLM 节点函数.
 
     Args:
@@ -92,7 +92,7 @@ def create_llm_node(llm: "BaseChatModel"):
         符合 LangGraph 节点签名的 callable.
     """
 
-    def llm_node(state: AgentState):
+    def llm_node(state: AgentState) -> Dict[str, Any]:
         """LLM 节点：注入文件快照后调用 LLM."""
         messages = list(state["messages"])
 

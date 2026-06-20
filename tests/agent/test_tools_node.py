@@ -6,7 +6,6 @@ Todo 与后台任务同步等核心分支.
 
 import os
 from typing import Any, Dict, List, Optional
-from unittest.mock import MagicMock
 
 import pytest
 from langchain_core.messages import AIMessage, ToolMessage
@@ -351,7 +350,8 @@ class TestToolsNodePlanMode:
         """enter_plan_mode 工具进入 Plan 模式并返回计划文件路径."""
         node = create_tools_node(plan_registry)
         ai_msg = AIMessage(
-            content="", tool_calls=[{"id": "tc1", "name": "enter_plan_mode", "args": {}}]
+            content="",
+            tool_calls=[{"id": "tc1", "name": "enter_plan_mode", "args": {}}],
         )
         result = node(_make_state(messages=[ai_msg]))
 
@@ -379,9 +379,7 @@ class TestToolsNodePlanMode:
                 }
             ],
         )
-        state = _make_state(
-            messages=[ai_msg], plan_mode=True, plan_file_path=plan_path
-        )
+        state = _make_state(messages=[ai_msg], plan_mode=True, plan_file_path=plan_path)
         result = node(state)
 
         assert len(result["messages"]) == 1
@@ -407,15 +405,15 @@ class TestToolsNodePlanMode:
                 }
             ],
         )
-        state = _make_state(
-            messages=[ai_msg], plan_mode=True, plan_file_path=plan_path
-        )
+        state = _make_state(messages=[ai_msg], plan_mode=True, plan_file_path=plan_path)
         result = node(state)
 
         assert result["messages"][0].content.startswith("[成功]")
         assert open(plan_path, "r").read() == "plan content"
 
-    def test_exit_plan_mode_approve(self, plan_registry, isolated_work_dir, monkeypatch):
+    def test_exit_plan_mode_approve(
+        self, plan_registry, isolated_work_dir, monkeypatch
+    ):
         """exit_plan_mode 用户批准则退出 Plan 模式."""
         node = create_tools_node(plan_registry)
         plan_path = str(isolated_work_dir / ".kimi" / "plans" / "plan.md")
@@ -429,9 +427,7 @@ class TestToolsNodePlanMode:
             content="",
             tool_calls=[{"id": "tc1", "name": "exit_plan_mode", "args": {}}],
         )
-        state = _make_state(
-            messages=[ai_msg], plan_mode=True, plan_file_path=plan_path
-        )
+        state = _make_state(messages=[ai_msg], plan_mode=True, plan_file_path=plan_path)
         result = node(state)
 
         assert result["plan_mode"] is False
@@ -453,9 +449,7 @@ class TestToolsNodePlanMode:
             content="",
             tool_calls=[{"id": "tc1", "name": "exit_plan_mode", "args": {}}],
         )
-        state = _make_state(
-            messages=[ai_msg], plan_mode=True, plan_file_path=plan_path
-        )
+        state = _make_state(messages=[ai_msg], plan_mode=True, plan_file_path=plan_path)
         result = node(state)
 
         assert result["plan_mode"] is True
@@ -501,9 +495,7 @@ class TestToolsNodePlanMode:
                 }
             ],
         )
-        state = _make_state(
-            messages=[ai_msg], plan_mode=True, plan_file_path=plan_path
-        )
+        state = _make_state(messages=[ai_msg], plan_mode=True, plan_file_path=plan_path)
         result = node(state)
 
         assert result["plan_mode"] is False
@@ -558,7 +550,11 @@ class TestToolsNodeSync:
         ai_msg = AIMessage(
             content="",
             tool_calls=[
-                {"id": "tc1", "name": "set_todo", "args": {"action": "complete", "index": 1}}
+                {
+                    "id": "tc1",
+                    "name": "set_todo",
+                    "args": {"action": "complete", "index": 1},
+                }
             ],
         )
         state = _make_state(

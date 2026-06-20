@@ -16,6 +16,19 @@
 - 📝 **日志记录** — 自动记录操作日志到 `logs/` 目录
 - 🔌 **多模型支持** — 支持 Kimi (K2.6)、OpenAI、Mock 模式
 
+## 项目亮点
+
+| 指标 | 数据 |
+|------|------|
+| 单元测试 | **357+** 用例，覆盖率 **85%** |
+| 内置 Benchmark | **9** 个可量化任务（fibonacci / tetris / 5 个 architecture-stress） |
+| 工具数量 | **20+** 种（文件 / Shell / Git / 任务 / 计划 / 子 Agent 等） |
+| 模型支持 | Kimi / OpenAI / Mock 三种 Provider |
+| 架构 | LangGraph ReAct + 审批门控 + 路径沙箱 + 上下文压缩 |
+| 界面 | CLI + Textual 全屏 TUI |
+
+> 所有代码均通过 `black` / `isort` / `flake8` / `mypy` 检查，CI 在 Python 3.10/3.11/3.12 上全绿运行。
+
 ## 架构设计
 
 ### 系统架构总览
