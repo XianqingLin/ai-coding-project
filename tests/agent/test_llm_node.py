@@ -21,8 +21,8 @@ from ai_coding.agent.state import AgentState
 def _make_state(
     messages: List[Any],
     file_snapshots: Optional[Dict[str, str]] = None,
-    todos: List[dict] = None,
-    sub_agents: List[dict] = None,
+    todos: Optional[List[dict]] = None,
+    sub_agents: Optional[List[dict]] = None,
 ) -> AgentState:
     return {
         "messages": messages,

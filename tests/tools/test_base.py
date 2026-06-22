@@ -5,7 +5,7 @@ from typing import List
 import pytest
 from langchain_core.tools import StructuredTool
 
-from ai_coding.tools.base import Tool, ToolParameter, ToolRegistry
+from ai_coding.tools.base import Tool, ToolParameter, ToolRegistry, ToolResult
 
 
 class _NoParamsTool(Tool):
@@ -16,8 +16,8 @@ class _NoParamsTool(Tool):
     def parameters(self) -> List[ToolParameter]:
         return []
 
-    def execute(self) -> str:
-        return "done"
+    def execute(self) -> ToolResult:
+        return ToolResult.ok("done")
 
 
 class _OptionalParamTool(Tool):
@@ -37,8 +37,8 @@ class _OptionalParamTool(Tool):
             ),
         ]
 
-    def execute(self, required_param: str, optional_param: str = "") -> str:
-        return f"{required_param}:{optional_param}"
+    def execute(self, required_param: str, optional_param: str = "") -> ToolResult:
+        return ToolResult.ok(f"{required_param}:{optional_param}")
 
 
 class _EnumParamTool(Tool):
@@ -49,8 +49,8 @@ class _EnumParamTool(Tool):
     def parameters(self) -> List[ToolParameter]:
         return [ToolParameter("mode", "string", "模式", enum=["fast", "slow"])]
 
-    def execute(self, mode: str) -> str:
-        return mode
+    def execute(self, mode: str) -> ToolResult:
+        return ToolResult.ok(mode)
 
 
 class TestToolSchema:
@@ -129,11 +129,32 @@ class TestToolRegistry:
         with pytest.raises(KeyError, match="未知工具"):
             registry.get("unknown")
 
-    def test_execute(self):
+    def test_execute_returns_tool_result(self):
         registry = ToolRegistry()
         registry.register(_OptionalParamTool())
         result = registry.execute("optional", {"required_param": "x"})
-        assert result == "x:default_value"
+        assert isinstance(result, ToolResult)
+        assert result.success is True
+        assert result.data == "x:default_value"
+
+    def test_execute_wraps_string_error_as_failure(self):
+        class _FailTool(Tool):
+            name = "fail"
+            description = "总是失败"
+
+            @property
+            def parameters(self) -> List[ToolParameter]:
+                return []
+
+            def execute(self) -> ToolResult:
+                return ToolResult.fail("[错误] 出错了")
+
+        registry = ToolRegistry()
+        registry.register(_FailTool())
+        result = registry.execute("fail", {})
+        assert isinstance(result, ToolResult)
+        assert result.success is False
+        assert "[错误] 出错了" in result.data
 
     def test_contains_and_len(self):
         registry = ToolRegistry()

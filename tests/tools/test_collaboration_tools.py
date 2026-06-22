@@ -12,7 +12,7 @@ class TestAskUserQuestionTool:
         """空 question 应返回错误."""
         tool = AskUserQuestionTool()
         result = tool.execute(question="")
-        assert "错误" in result
+        assert "错误" in result.data
 
     def test_single_select_valid_option(self, monkeypatch):
         """单选有效选项."""
@@ -22,7 +22,7 @@ class TestAskUserQuestionTool:
             question="选择颜色",
             options=[{"label": "红"}, {"label": "蓝"}],
         )
-        assert "[用户选择] 蓝" in result
+        assert "[用户选择] 蓝" in result.data
 
     def test_single_select_custom_input(self, monkeypatch):
         """选择 0 后输入自定义回答."""
@@ -33,7 +33,7 @@ class TestAskUserQuestionTool:
             question="选择或输入",
             options=[{"label": "A"}],
         )
-        assert "[用户回答] 自定义答案" in result
+        assert "[用户回答] 自定义答案" in result.data
 
     def test_multi_select(self, monkeypatch):
         """多选有效选项."""
@@ -44,14 +44,14 @@ class TestAskUserQuestionTool:
             options=[{"label": "A"}, {"label": "B"}, {"label": "C"}],
             multi_select=True,
         )
-        assert "[用户选择] A, C" in result
+        assert "[用户选择] A, C" in result.data
 
     def test_direct_text_input(self, monkeypatch):
         """非数字输入视为直接文本回答."""
         monkeypatch.setattr("builtins.input", lambda _: "直接回答")
         tool = AskUserQuestionTool()
         result = tool.execute(question="你的意见？")
-        assert "[用户回答] 直接回答" in result
+        assert "[用户回答] 直接回答" in result.data
 
 
 class TestAgentTool:
@@ -61,13 +61,13 @@ class TestAgentTool:
         """空 prompt 应返回错误."""
         tool = AgentTool()
         result = tool.execute(prompt="", description="test")
-        assert "错误" in result
+        assert "错误" in result.data
 
     def test_empty_description_returns_error(self):
         """空 description 应返回错误."""
         tool = AgentTool()
         result = tool.execute(prompt="do something", description="")
-        assert "错误" in result
+        assert "错误" in result.data
 
     def test_unsupported_subagent_type(self):
         """不支持的 subagent_type 应返回错误."""
@@ -78,14 +78,34 @@ class TestAgentTool:
             description="test",
             subagent_type="unknown",
         )
-        assert "错误" in result
+        assert "错误" in result.data
 
     def test_missing_llm_returns_error(self):
         """未设置 LLM 应返回错误."""
         tool = AgentTool()
         result = tool.execute(prompt="do something", description="test")
-        assert "错误" in result
-        assert "LLM" in result
+        assert "错误" in result.data
+        assert "LLM" in result.data
+
+    def test_resume_ignores_subagent_type(
+        self, clean_sub_agent_manager, isolated_work_dir
+    ):
+        """resume 非空时应忽略 subagent_type 校验."""
+        SubAgentManager._instance = None
+        tool = AgentTool()
+        tool.set_parent_context(work_dir=str(isolated_work_dir))
+        tool.set_llm(MockChatModel(responses=[mock_text("done")]))
+
+        result = tool.execute(
+            prompt="resume task",
+            description="test resume",
+            resume="non_existent_instance",
+            subagent_type="unknown",
+        )
+
+        # 不应因 subagent_type 非法而报错
+        assert "不支持的 subagent_type" not in result.data
+        SubAgentManager._instance = None
 
     def test_sync_dispatch(
         self, clean_sub_agent_manager, isolated_work_dir, monkeypatch
@@ -102,7 +122,7 @@ class TestAgentTool:
             subagent_type="coder",
         )
 
-        assert "sub result" in result
+        assert "sub result" in result.data
         SubAgentManager._instance = None
 
     def test_background_dispatch(self, clean_sub_agent_manager, isolated_work_dir):
@@ -119,5 +139,5 @@ class TestAgentTool:
             run_in_background=True,
         )
 
-        assert "后台启动" in result
+        assert "后台启动" in result.data
         SubAgentManager._instance = None

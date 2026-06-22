@@ -7,10 +7,29 @@
 from __future__ import annotations
 
 import subprocess
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
-from ai_coding.tools.base import Tool, ToolParameter
-from ai_coding.tools.sandbox import SandboxViolationError, resolve_sandboxed_cwd
+from ai_coding.tools.base import Tool, ToolParameter, ToolResult
+from ai_coding.tools.safety import PathBoundaryError, resolve_workdir_cwd
+
+
+def _ok(data: str, metadata: Optional[Dict[str, Any]] = None) -> ToolResult:
+    return ToolResult.ok(data, metadata=metadata)
+
+
+def _fail(data: str, error_code: Optional[str] = None) -> ToolResult:
+    return ToolResult.fail(data, error_code=error_code)
+
+
+def _wrap_git_result(result: str) -> ToolResult:
+    """包装 _run_git 返回的字符串为 ToolResult."""
+    if result.startswith("[错误]"):
+        # 路径越界 / 工作目录解析失败归为 PATH_BOUNDARY_ERROR，其余归为 GIT_ERROR
+        if "PathBoundaryError" in result or "超出工作目录" in result:
+            return _fail(result, error_code="PATH_BOUNDARY_ERROR")
+        return _fail(result, error_code="GIT_ERROR")
+    return _ok(result)
+
 
 MAX_OUTPUT_LINES = 200
 MAX_OUTPUT_BYTES = 32 * 1024
@@ -42,13 +61,13 @@ class GitToolBase(Tool):
     requires_approval: bool = False
 
     def _resolve_cwd(self, cwd: Optional[str]) -> str:
-        """解析并校验工作目录位于沙箱内."""
+        """解析并校验工作目录位于允许范围内."""
         if cwd is None:
-            return str(resolve_sandboxed_cwd(None, self.work_dir))
+            return str(resolve_workdir_cwd(None, self.work_dir))
         try:
-            return str(resolve_sandboxed_cwd(cwd, self.work_dir))
-        except SandboxViolationError as e:
-            raise SandboxViolationError(str(e)) from e
+            return str(resolve_workdir_cwd(cwd, self.work_dir))
+        except PathBoundaryError as e:
+            raise PathBoundaryError(str(e)) from e
 
     def _run_git(
         self,
@@ -60,7 +79,7 @@ class GitToolBase(Tool):
         """执行 Git 命令并返回格式化结果."""
         try:
             effective_cwd = self._resolve_cwd(cwd)
-        except SandboxViolationError as e:
+        except PathBoundaryError as e:
             return f"[错误] {e}"
         except Exception as e:
             return f"[错误] 解析工作目录失败: {e}"
@@ -122,8 +141,12 @@ class GitStatusTool(GitToolBase):
             ),
         ]
 
-    def execute(self, cwd: Optional[str] = None) -> str:  # type: ignore[override]
-        return self._run_git(["status", "--porcelain=v1", "-uall"], cwd=cwd)
+    def execute(  # type: ignore[override]
+        self, cwd: Optional[str] = None
+    ) -> ToolResult:
+        return _wrap_git_result(
+            self._run_git(["status", "--porcelain=v1", "-uall"], cwd=cwd)
+        )
 
 
 class GitDiffTool(GitToolBase):
@@ -164,13 +187,13 @@ class GitDiffTool(GitToolBase):
         cached: bool = False,
         path: Optional[str] = None,
         cwd: Optional[str] = None,
-    ) -> str:
+    ) -> ToolResult:
         args = ["diff"]
         if cached:
             args.append("--cached")
         if path:
             args.extend(["--", path])
-        return self._run_git(args, cwd=cwd)
+        return _wrap_git_result(self._run_git(args, cwd=cwd))
 
 
 class GitLogTool(GitToolBase):
@@ -215,13 +238,13 @@ class GitLogTool(GitToolBase):
         since: Optional[str] = None,
         path: Optional[str] = None,
         cwd: Optional[str] = None,
-    ) -> str:
+    ) -> ToolResult:
         args = ["log", "--oneline", f"-n {max(1, int(limit))}"]
         if since:
             args.extend(["--since", since])
         if path:
             args.extend(["--", path])
-        return self._run_git(args, cwd=cwd)
+        return _wrap_git_result(self._run_git(args, cwd=cwd))
 
 
 class GitBranchListTool(GitToolBase):
@@ -241,8 +264,10 @@ class GitBranchListTool(GitToolBase):
             ),
         ]
 
-    def execute(self, cwd: Optional[str] = None) -> str:  # type: ignore[override]
-        return self._run_git(["branch", "--list"], cwd=cwd)
+    def execute(  # type: ignore[override]
+        self, cwd: Optional[str] = None
+    ) -> ToolResult:
+        return _wrap_git_result(self._run_git(["branch", "--list"], cwd=cwd))
 
 
 class GitBranchCreateTool(GitToolBase):
@@ -278,13 +303,13 @@ class GitBranchCreateTool(GitToolBase):
         branch: str,
         base: Optional[str] = None,
         cwd: Optional[str] = None,
-    ) -> str:
+    ) -> ToolResult:
         if not branch.strip():
-            return "[错误] branch 参数不能为空"
+            return _fail("[错误] branch 参数不能为空", error_code="VALIDATION_ERROR")
         args = ["branch", branch]
         if base:
             args.append(base)
-        return self._run_git(args, cwd=cwd)
+        return _wrap_git_result(self._run_git(args, cwd=cwd))
 
 
 class GitBranchSwitchTool(GitToolBase):
@@ -321,14 +346,14 @@ class GitBranchSwitchTool(GitToolBase):
         branch: str,
         create: bool = False,
         cwd: Optional[str] = None,
-    ) -> str:
+    ) -> ToolResult:
         if not branch.strip():
-            return "[错误] branch 参数不能为空"
+            return _fail("[错误] branch 参数不能为空", error_code="VALIDATION_ERROR")
         args = ["switch"]
         if create:
             args.append("-c")
         args.append(branch)
-        return self._run_git(args, cwd=cwd)
+        return _wrap_git_result(self._run_git(args, cwd=cwd))
 
 
 class GitAddTool(GitToolBase):
@@ -359,11 +384,11 @@ class GitAddTool(GitToolBase):
 
     def execute(  # type: ignore[override]
         self, paths: str, cwd: Optional[str] = None
-    ) -> str:
+    ) -> ToolResult:
         if not paths.strip():
-            return "[错误] paths 参数不能为空"
+            return _fail("[错误] paths 参数不能为空", error_code="VALIDATION_ERROR")
         raw_paths = [p.strip() for p in paths.replace(",", " ").split() if p.strip()]
-        return self._run_git(["add", *raw_paths], cwd=cwd)
+        return _wrap_git_result(self._run_git(["add", *raw_paths], cwd=cwd))
 
 
 class GitCommitTool(GitToolBase):
@@ -391,13 +416,15 @@ class GitCommitTool(GitToolBase):
 
     def execute(  # type: ignore[override]
         self, message: str, cwd: Optional[str] = None
-    ) -> str:
+    ) -> ToolResult:
         if not message.strip():
-            return "[错误] 提交信息不能为空"
-        return self._run_git(
-            ["commit", "-m", message],
-            cwd=cwd,
-            input_text="\n",
+            return _fail("[错误] 提交信息不能为空", error_code="VALIDATION_ERROR")
+        return _wrap_git_result(
+            self._run_git(
+                ["commit", "-m", message],
+                cwd=cwd,
+                input_text="\n",
+            )
         )
 
 
@@ -440,9 +467,9 @@ class GitPushTool(GitToolBase):
         remote: str = "origin",
         branch: Optional[str] = None,
         cwd: Optional[str] = None,
-    ) -> str:
+    ) -> ToolResult:
         remote = remote or "origin"
         args = ["push", remote]
         if branch:
             args.append(branch)
-        return self._run_git(args, cwd=cwd)
+        return _wrap_git_result(self._run_git(args, cwd=cwd))

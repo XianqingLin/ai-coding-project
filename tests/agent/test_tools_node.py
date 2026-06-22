@@ -19,7 +19,7 @@ from ai_coding.agent.nodes.tools_node import (
     create_tools_node,
 )
 from ai_coding.agent.state import AgentState
-from ai_coding.tools.base import Tool, ToolParameter, ToolRegistry
+from ai_coding.tools.base import Tool, ToolParameter, ToolRegistry, ToolResult
 from ai_coding.tools.collaboration_tools import AskUserQuestionTool
 from ai_coding.tools.plan_tools import EnterPlanModeTool, ExitPlanModeTool
 from ai_coding.tools.shell_tools import ExecuteCommandTool
@@ -37,8 +37,8 @@ class _EchoTool(Tool):
     def parameters(self) -> List[ToolParameter]:
         return [ToolParameter("text", "string", "要回显的文本")]
 
-    def execute(self, text: str) -> str:
-        return f"echo: {text}"
+    def execute(self, text: str) -> ToolResult:
+        return ToolResult.ok(f"echo: {text}")
 
 
 class _ReadFileTool(Tool):
@@ -52,10 +52,10 @@ class _ReadFileTool(Tool):
     def parameters(self) -> List[ToolParameter]:
         return [ToolParameter("path", "string", "文件路径")]
 
-    def execute(self, path: str) -> str:
+    def execute(self, path: str) -> ToolResult:
         full_path = os.path.join(self.work_dir, path)
         if not os.path.exists(full_path):
-            return f"[错误] 文件不存在: {path}"
+            return ToolResult.fail(f"[错误] 文件不存在: {path}")
         content = open(full_path, "r", encoding="utf-8").read()
         lines = content.split("\n")
         result_lines = [f"文件: {path}", "=" * 20]
@@ -63,7 +63,7 @@ class _ReadFileTool(Tool):
             result_lines.append(f"{i:3d} | {line}")
         result_lines.append("=" * 20)
         result_lines.append(f"(本段共 {len(lines)} 行)")
-        return "\n".join(result_lines)
+        return ToolResult.ok("\n".join(result_lines))
 
 
 class _WriteFileTool(Tool):
@@ -80,18 +80,18 @@ class _WriteFileTool(Tool):
             ToolParameter("content", "string", "文件内容"),
         ]
 
-    def execute(self, path: str, content: str) -> str:
+    def execute(self, path: str, content: str) -> ToolResult:
         full_path = os.path.join(self.work_dir, path)
         os.makedirs(os.path.dirname(full_path) or self.work_dir, exist_ok=True)
         with open(full_path, "w", encoding="utf-8") as f:
             f.write(content)
-        return f"[成功] 已写入文件: {path}"
+        return ToolResult.ok(f"[成功] 已写入文件: {path}")
 
 
-class _EditFileTool(Tool):
-    """模拟 edit_file."""
+class _EditFileBlocksTool(Tool):
+    """模拟 edit_file_blocks."""
 
-    name = "edit_file"
+    name = "edit_file_blocks"
     description = "编辑文件"
     requires_approval = False
 
@@ -99,20 +99,38 @@ class _EditFileTool(Tool):
     def parameters(self) -> List[ToolParameter]:
         return [
             ToolParameter("path", "string", "文件路径"),
-            ToolParameter("old_string", "string", "旧字符串"),
-            ToolParameter("new_string", "string", "新字符串"),
+            ToolParameter("blocks", "string", "SEARCH/REPLACE 编辑块"),
         ]
 
-    def execute(self, path: str, old_string: str, new_string: str) -> str:
+    def _make_block(self, search: str, replace: str) -> str:
+        return f"<<<<<<< SEARCH\n{search}\n=======\n{replace}\n>>>>>>> REPLACE\n"
+
+    def execute(self, path: str, blocks: str) -> ToolResult:
         full_path = os.path.join(self.work_dir, path)
         with open(full_path, "r", encoding="utf-8") as f:
             content = f.read()
-        if old_string not in content:
-            return f"[错误] 未找到匹配文本: {old_string}"
-        content = content.replace(old_string, new_string, 1)
+
+        # 简单解析：只支持一个块，用于测试
+        if "<<<<<<< SEARCH" not in blocks:
+            return ToolResult.fail("[错误] 编辑块格式不正确")
+        search_start = blocks.find("<<<<<<< SEARCH\n") + len("<<<<<<< SEARCH\n")
+        divider = blocks.find("\n=======\n", search_start)
+        if divider == -1:
+            return ToolResult.fail("[错误] 编辑块缺少分隔符")
+        replace_start = divider + len("\n=======\n")
+        end = blocks.find("\n>>>>>>> REPLACE", replace_start)
+        if end == -1:
+            return ToolResult.fail("[错误] 编辑块缺少结束符")
+
+        search = blocks[search_start:divider]
+        replace = blocks[replace_start:end]
+
+        if search not in content:
+            return ToolResult.fail(f"[错误] 未找到匹配文本: {search}")
+        content = content.replace(search, replace, 1)
         with open(full_path, "w", encoding="utf-8") as f:
             f.write(content)
-        return f"[成功] 已编辑文件: {path}"
+        return ToolResult.ok(f"[成功] 已编辑文件: {path}")
 
 
 def _make_state(
@@ -144,7 +162,7 @@ def base_registry(isolated_work_dir):
         _EchoTool(),
         _ReadFileTool(),
         _WriteFileTool(),
-        _EditFileTool(),
+        _EditFileBlocksTool(),
         TodoTool(),
     ]:
         tool.set_work_dir(str(isolated_work_dir))
@@ -252,8 +270,8 @@ class TestToolsNodeFileSnapshots:
         assert proposals[0]["old_content"] == ""
         assert proposals[0]["new_content"] == "new content"
 
-    def test_edit_file_updates_snapshot(self, base_registry, isolated_work_dir):
-        """edit_file 成功后刷新快照."""
+    def test_edit_file_blocks_updates_snapshot(self, base_registry, isolated_work_dir):
+        """edit_file_blocks 成功后刷新快照."""
         (isolated_work_dir / "c.txt").write_text("old text", encoding="utf-8")
         node = create_tools_node(base_registry)
         ai_msg = AIMessage(
@@ -261,11 +279,16 @@ class TestToolsNodeFileSnapshots:
             tool_calls=[
                 {
                     "id": "tc1",
-                    "name": "edit_file",
+                    "name": "edit_file_blocks",
                     "args": {
                         "path": "c.txt",
-                        "old_string": "old text",
-                        "new_string": "new text",
+                        "blocks": (
+                            "<<<<<<< SEARCH\n"
+                            "old text\n"
+                            "=======\n"
+                            "new text\n"
+                            ">>>>>>> REPLACE\n"
+                        ),
                     },
                 }
             ],
@@ -274,10 +297,10 @@ class TestToolsNodeFileSnapshots:
 
         assert result["file_snapshots"].get("c.txt") == "new text"
 
-    def test_edit_file_failed_does_not_update_snapshot(
+    def test_edit_file_blocks_failed_does_not_update_snapshot(
         self, base_registry, isolated_work_dir
     ):
-        """edit_file 失败时不应更新快照."""
+        """edit_file_blocks 失败时不应更新快照."""
         (isolated_work_dir / "d.txt").write_text("content", encoding="utf-8")
         node = create_tools_node(base_registry)
         ai_msg = AIMessage(
@@ -285,11 +308,16 @@ class TestToolsNodeFileSnapshots:
             tool_calls=[
                 {
                     "id": "tc1",
-                    "name": "edit_file",
+                    "name": "edit_file_blocks",
                     "args": {
                         "path": "d.txt",
-                        "old_string": "not exist",
-                        "new_string": "x",
+                        "blocks": (
+                            "<<<<<<< SEARCH\n"
+                            "not exist\n"
+                            "=======\n"
+                            "x\n"
+                            ">>>>>>> REPLACE\n"
+                        ),
                     },
                 }
             ],
@@ -332,7 +360,7 @@ class TestToolsNodePlanMode:
         read_tool.set_work_dir(str(isolated_work_dir))
         write_tool = _WriteFileTool()
         write_tool.set_work_dir(str(isolated_work_dir))
-        edit_tool = _EditFileTool()
+        edit_tool = _EditFileBlocksTool()
         edit_tool.set_work_dir(str(isolated_work_dir))
         enter_tool = EnterPlanModeTool()
         enter_tool.set_work_dir(str(isolated_work_dir))

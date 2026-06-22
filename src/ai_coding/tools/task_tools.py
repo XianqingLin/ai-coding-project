@@ -5,10 +5,18 @@
 """
 
 import time
-from typing import List
+from typing import Any, Dict, List, Optional
 
-from ai_coding.tools.base import Tool, ToolParameter
+from ai_coding.tools.base import Tool, ToolParameter, ToolResult
 from ai_coding.tools.shell_tools import ExecuteCommandTool
+
+
+def _ok(data: str, metadata: Optional[Dict[str, Any]] = None) -> ToolResult:
+    return ToolResult.ok(data, metadata=metadata)
+
+
+def _fail(data: str, error_code: Optional[str] = None) -> ToolResult:
+    return ToolResult.fail(data, error_code=error_code)
 
 
 class TaskListTool(Tool):
@@ -46,13 +54,13 @@ class TaskListTool(Tool):
 
     def execute(  # type: ignore[override]
         self, active_only: bool = True, limit: int = 20
-    ) -> str:
+    ) -> ToolResult:
         limit = max(1, min(100, int(limit)))
         tasks = self._task_manager.list_tasks(active_only=active_only, limit=limit)
 
         if not tasks:
             scope = "运行中" if active_only else "所有"
-            return f"当前没有 {scope} 的后台任务."
+            return _ok(f"当前没有 {scope} 的后台任务.")
 
         lines = [f"后台任务 ({len(tasks)} 个):"]
         for t in tasks:
@@ -63,7 +71,7 @@ class TaskListTool(Tool):
                 cmd = cmd[:60] + "..."
             lines.append(f"  [{status:10s}] {t['task_id']}  {desc}  ({cmd})")
 
-        return "\n".join(lines)
+        return _ok("\n".join(lines))
 
 
 class TaskOutputTool(Tool):
@@ -103,7 +111,7 @@ class TaskOutputTool(Tool):
 
     def execute(  # type: ignore[override]
         self, task_id: str, block: bool = False, timeout: int = 30
-    ) -> str:
+    ) -> ToolResult:
         timeout = max(0, min(3600, int(timeout)))
 
         if block:
@@ -111,14 +119,20 @@ class TaskOutputTool(Tool):
             while time.time() - start < timeout:
                 t = self._task_manager.get_task(task_id)
                 if not t:
-                    return f"[错误] 任务不存在: {task_id}"
+                    return _fail(
+                        f"[错误] 任务不存在: {task_id}",
+                        error_code="TASK_NOT_FOUND",
+                    )
                 if t["status"] != "running":
                     break
                 time.sleep(0.5)
 
         t = self._task_manager.get_task(task_id)
         if not t:
-            return f"[错误] 任务不存在: {task_id}"
+            return _fail(
+                f"[错误] 任务不存在: {task_id}",
+                error_code="TASK_NOT_FOUND",
+            )
 
         status = t["status"]
         output_path = t["output_path"]
@@ -144,7 +158,7 @@ class TaskOutputTool(Tool):
                 "\n[提示] 任务仍在运行中，可稍后再次调用 task_output 查看最新输出。"
             )
 
-        return header
+        return _ok(header)
 
 
 class TaskStopTool(Tool):
@@ -176,5 +190,8 @@ class TaskStopTool(Tool):
 
     def execute(  # type: ignore[override]
         self, task_id: str, reason: str = "Stopped by TaskStop"
-    ) -> str:
-        return self._task_manager.stop_task(task_id, reason)
+    ) -> ToolResult:
+        result = self._task_manager.stop_task(task_id, reason)
+        if result.startswith("[错误]"):
+            return _fail(result, error_code="TASK_NOT_FOUND")
+        return _ok(result)

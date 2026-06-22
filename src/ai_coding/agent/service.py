@@ -27,10 +27,8 @@ from ai_coding.config import DEFAULT_LLM_PROVIDER
 from ai_coding.environment import collect_environment_info
 from ai_coding.llm import create_lc_llm
 from ai_coding.logger import get_logger
-from ai_coding.mcp.client import MCPClient
 from ai_coding.prompts import PromptContext
 from ai_coding.tools import create_default_tools
-from ai_coding.tools.mcp_loader import load_mcp_tools
 
 logger = get_logger(__name__)
 
@@ -55,7 +53,6 @@ class AgentService:
         auto_approve: bool = False,
         llm_factory: Optional[Callable[[], Any]] = None,
         enable_env_info: bool = True,
-        mcp_config_path: Optional[str] = None,
     ) -> None:
         """初始化 AgentService.
 
@@ -65,13 +62,11 @@ class AgentService:
             auto_approve: 是否自动批准工具调用.
             llm_factory: 可选的 LLM 工厂函数，主要用于测试注入 Mock LLM.
             enable_env_info: 是否在系统提示词中注入环境信息.
-            mcp_config_path: MCP Server 配置文件路径, None 时使用默认配置.
         """
         self.work_dir = str(Path(work_dir).expanduser().resolve())
         self.llm_provider = llm_provider or DEFAULT_LLM_PROVIDER
         self.auto_approve = auto_approve
         self._llm_factory = llm_factory or (lambda: create_lc_llm(self.llm_provider))
-        self._mcp_clients: List[MCPClient] = []
 
         prompt_context = None
         if enable_env_info:
@@ -80,14 +75,9 @@ class AgentService:
             )
             prompt_context = PromptContext(environment_info=environment_info)
 
-        # 加载 MCP 工具, 每个 AgentService 实例只连接一次
-        mcp_tools, self._mcp_clients = load_mcp_tools(mcp_config_path)
-        if mcp_tools:
-            logger.info(f"AgentService 已加载 {len(mcp_tools)} 个 MCP 工具")
-
         self._sm = SessionManager(
             llm_factory=self._llm_factory,
-            tools_factory=lambda: create_default_tools(mcp_tools=mcp_tools),
+            tools_factory=create_default_tools,
             auto_approve=self.auto_approve,
             work_dir=self.work_dir,
             prompt_context=prompt_context,
@@ -278,19 +268,3 @@ class AgentService:
             if s.get("session_id") == current_id:
                 return s
         return None
-
-    def disconnect(self) -> None:
-        """断开所有 MCP Server 连接并清理资源."""
-        for client in self._mcp_clients:
-            try:
-                client.stop()
-            except Exception as e:
-                logger.debug(f"MCP Client '{client.server_name}' 停止异常: {e}")
-        self._mcp_clients.clear()
-
-    def __del__(self) -> None:
-        """析构时尝试清理 MCP 连接."""
-        try:
-            self.disconnect()
-        except Exception:
-            pass

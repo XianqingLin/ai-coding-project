@@ -126,7 +126,7 @@ class TestGitStatusTool:
     def test_status_clean_repo(self, git_status_tool, isolated_work_dir):
         init_git_repo(isolated_work_dir)
         result = git_status_tool.execute()
-        assert "[成功]" in result
+        assert "[成功]" in result.data
 
     def test_status_modified_file(self, git_status_tool, isolated_work_dir):
         init_git_repo(isolated_work_dir)
@@ -140,12 +140,12 @@ class TestGitStatusTool:
 
         result = git_status_tool.execute()
 
-        assert "A  a.txt" in result
+        assert "A  a.txt" in result.data
 
     def test_status_not_a_repo(self, git_status_tool):
         result = git_status_tool.execute()
-        assert result.startswith("[错误]")
-        assert "不是 git 仓库" in result
+        assert result.data.startswith("[错误]")
+        assert "不是 git 仓库" in result.data
 
 
 class TestGitDiffTool:
@@ -156,8 +156,8 @@ class TestGitDiffTool:
 
         result = git_diff_tool.execute()
 
-        assert "modified" in result
-        assert "original" in result
+        assert "modified" in result.data
+        assert "original" in result.data
 
     def test_diff_cached(self, git_diff_tool, isolated_work_dir):
         init_git_repo(isolated_work_dir)
@@ -172,11 +172,11 @@ class TestGitDiffTool:
 
         result = git_diff_tool.execute(cached=True)
 
-        assert "modified" in result
+        assert "modified" in result.data
 
     def test_diff_not_a_repo(self, git_diff_tool):
         result = git_diff_tool.execute()
-        assert result.startswith("[错误]")
+        assert result.data.startswith("[错误]")
 
 
 class TestGitLogTool:
@@ -187,8 +187,8 @@ class TestGitLogTool:
 
         result = git_log_tool.execute(limit=10)
 
-        assert "first" in result
-        assert "second" in result
+        assert "first" in result.data
+        assert "second" in result.data
 
     def test_log_path_filter(self, git_log_tool, isolated_work_dir):
         init_git_repo(isolated_work_dir)
@@ -197,12 +197,12 @@ class TestGitLogTool:
 
         result = git_log_tool.execute(path="a.txt")
 
-        assert "commit a" in result
-        assert "commit b" not in result
+        assert "commit a" in result.data
+        assert "commit b" not in result.data
 
     def test_log_not_a_repo(self, git_log_tool):
         result = git_log_tool.execute()
-        assert result.startswith("[错误]")
+        assert result.data.startswith("[错误]")
 
 
 class TestGitBranchTools:
@@ -212,7 +212,7 @@ class TestGitBranchTools:
 
         result = git_branch_list_tool.execute()
 
-        assert "master" in result or "main" in result
+        assert "master" in result.data or "main" in result.data
 
     def test_branch_create(self, git_branch_create_tool, isolated_work_dir):
         init_git_repo(isolated_work_dir)
@@ -220,7 +220,7 @@ class TestGitBranchTools:
 
         result = git_branch_create_tool.execute(branch="feature")
 
-        assert result.startswith("[成功]") or "feature" in result
+        assert result.data.startswith("[成功]") or "feature" in result.data
         branches = subprocess.run(
             ["git", "branch", "--list"],
             cwd=str(isolated_work_dir),
@@ -245,7 +245,7 @@ class TestGitBranchTools:
 
         result = git_branch_switch_tool.execute(branch="feature")
 
-        assert result.startswith("[成功]") or "feature" in result
+        assert result.data.startswith("[成功]") or "feature" in result.data
         current = subprocess.run(
             ["git", "branch", "--show-current"],
             cwd=str(isolated_work_dir),
@@ -261,7 +261,7 @@ class TestGitBranchTools:
 
         result = git_branch_switch_tool.execute(branch="feature", create=True)
 
-        assert result.startswith("[成功]") or "feature" in result
+        assert result.data.startswith("[成功]") or "feature" in result.data
         current = subprocess.run(
             ["git", "branch", "--show-current"],
             cwd=str(isolated_work_dir),
@@ -282,7 +282,7 @@ class TestGitAddTool:
 
         result = git_add_tool.execute(paths="a.txt")
 
-        assert result.startswith("[成功]")
+        assert result.data.startswith("[成功]")
         status = subprocess.run(
             ["git", "status", "--porcelain=v1"],
             cwd=str(isolated_work_dir),
@@ -299,7 +299,7 @@ class TestGitAddTool:
 
         result = git_add_tool.execute(paths="a.txt, b.txt")
 
-        assert result.startswith("[成功]")
+        assert result.data.startswith("[成功]")
 
     def test_add_requires_approval(self):
         assert GitAddTool.requires_approval is True
@@ -313,7 +313,7 @@ class TestGitCommitTool:
 
         result = git_commit_tool.execute(message="add a.txt")
 
-        assert result.startswith("[成功]") or "add a.txt" in result
+        assert result.data.startswith("[成功]") or "add a.txt" in result.data
         log = subprocess.run(
             ["git", "log", "--oneline", "-n", "1"],
             cwd=str(isolated_work_dir),
@@ -328,7 +328,7 @@ class TestGitCommitTool:
 
     def test_commit_empty_message(self, git_commit_tool):
         result = git_commit_tool.execute(message="   ")
-        assert result.startswith("[错误]")
+        assert result.data.startswith("[错误]")
 
 
 class TestGitPushTool:
@@ -339,7 +339,7 @@ class TestGitPushTool:
         result = git_push_tool.execute()
 
         # 没有远程仓库, push 应该失败并被包装为错误
-        assert result.startswith("[错误]")
+        assert result.data.startswith("[错误]")
 
     def test_push_requires_approval(self):
         assert GitPushTool.requires_approval is True
@@ -348,15 +348,15 @@ class TestGitPushTool:
 class TestGitSandboxAndErrors:
     def test_status_outside_work_dir(self, git_status_tool):
         result = git_status_tool.execute(cwd="../outside")
-        assert result.startswith("[错误]")
+        assert result.data.startswith("[错误]")
 
     def test_branch_create_empty_name(self, git_branch_create_tool):
         result = git_branch_create_tool.execute(branch="   ")
-        assert result.startswith("[错误]")
+        assert result.data.startswith("[错误]")
 
     def test_add_empty_paths(self, git_add_tool):
         result = git_add_tool.execute(paths="   ")
-        assert result.startswith("[错误]")
+        assert result.data.startswith("[错误]")
 
 
 class TestGitOutputTruncation:

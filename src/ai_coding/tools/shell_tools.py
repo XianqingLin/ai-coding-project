@@ -10,10 +10,24 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-from ai_coding.tools.base import Tool, ToolParameter
-from ai_coding.tools.sandbox import SandboxViolationError, resolve_sandboxed_cwd
+from ai_coding.config import SHELL_SAFETY_STRICT
+from ai_coding.tools.base import Tool, ToolParameter, ToolResult
+from ai_coding.tools.safety import (
+    PathBoundaryError,
+    ShellSafetyChecker,
+    ShellSafetyError,
+    resolve_workdir_cwd,
+)
+
+
+def _ok(data: str, metadata: Optional[Dict[str, Any]] = None) -> ToolResult:
+    return ToolResult.ok(data, metadata=metadata)
+
+
+def _fail(data: str, error_code: Optional[str] = None) -> ToolResult:
+    return ToolResult.fail(data, error_code=error_code)
 
 
 class ExecuteCommandTool(Tool):
@@ -36,6 +50,8 @@ class ExecuteCommandTool(Tool):
     def __init__(self) -> None:
         super().__init__()
         self._bg_tasks: Dict[str, dict] = {}
+        self._safety = ShellSafetyChecker()
+        self._safety_strict = SHELL_SAFETY_STRICT
         atexit.register(self._cleanup_all_on_exit)
 
     @property
@@ -80,10 +96,22 @@ class ExecuteCommandTool(Tool):
         run_in_background: bool = False,
         description: Optional[str] = None,
         disable_timeout: bool = False,
-    ) -> str:
+    ) -> ToolResult:
         if run_in_background:
-            return self._run_background(command, cwd, description, disable_timeout)
-        return self._run_foreground(command, cwd, timeout)
+            result = self._run_background(command, cwd, description, disable_timeout)
+        else:
+            result = self._run_foreground(command, cwd, timeout)
+        # _run_* 仍返回字符串，execute 负责包装为 ToolResult
+        if result.startswith("[错误]"):
+            # 进一步区分错误类型
+            if "安全策略" in result:
+                return _fail(result, error_code="SAFETY_ERROR")
+            if "超出工作目录" in result or "PathBoundaryError" in result:
+                return _fail(result, error_code="PATH_BOUNDARY_ERROR")
+            return _fail(result, error_code="EXECUTION_ERROR")
+        if result.startswith("[超时]"):
+            return _fail(result, error_code="TIMEOUT")
+        return _ok(result)
 
     def _run_foreground(self, command: str, cwd: Optional[str], timeout_ms: int) -> str:
         """前台同步执行：两阶段终止策略 (SIGTERM -> 5s -> SIGKILL)."""
@@ -91,11 +119,17 @@ class ExecuteCommandTool(Tool):
         timeout_sec = timeout_ms / 1000.0 if timeout_ms > 0 else None
 
         try:
-            effective_cwd = resolve_sandboxed_cwd(cwd, self.work_dir)
-        except SandboxViolationError as e:
+            effective_cwd = resolve_workdir_cwd(cwd, self.work_dir)
+        except PathBoundaryError as e:
             return f"[错误] {e}"
         except Exception as e:
             return f"[错误] 解析工作目录失败: {e}"
+
+        if self._safety_strict:
+            try:
+                self._safety.check(command, cwd=str(effective_cwd))
+            except ShellSafetyError as e:
+                return f"[错误] {e}"
 
         try:
             proc = subprocess.Popen(
@@ -145,11 +179,17 @@ class ExecuteCommandTool(Tool):
             return "[错误] run_in_background=true 时必须提供 description 参数."
 
         try:
-            effective_cwd = resolve_sandboxed_cwd(cwd, self.work_dir)
-        except SandboxViolationError as e:
+            effective_cwd = resolve_workdir_cwd(cwd, self.work_dir)
+        except PathBoundaryError as e:
             return f"[错误] {e}"
         except Exception as e:
             return f"[错误] 解析工作目录失败: {e}"
+
+        if self._safety_strict:
+            try:
+                self._safety.check(command, cwd=str(effective_cwd))
+            except ShellSafetyError as e:
+                return f"[错误] {e}"
 
         task_id = uuid.uuid4().hex[:8]
         output_path = Path(tempfile.gettempdir()) / f"ai-coding-bg-{task_id}.log"

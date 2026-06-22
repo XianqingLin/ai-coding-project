@@ -5,7 +5,15 @@
 
 from typing import Any, Callable, Dict, List, Optional
 
-from ai_coding.tools.base import Tool, ToolParameter
+from ai_coding.tools.base import Tool, ToolParameter, ToolResult
+
+
+def _ok(data: str, metadata: Optional[Dict[str, Any]] = None) -> ToolResult:
+    return ToolResult.ok(data, metadata=metadata)
+
+
+def _fail(data: str, error_code: Optional[str] = None) -> ToolResult:
+    return ToolResult.fail(data, error_code=error_code)
 
 
 class AskUserQuestionTool(Tool):
@@ -43,9 +51,9 @@ class AskUserQuestionTool(Tool):
         question: str = "",
         options: Optional[List[Any]] = None,
         multi_select: bool = False,
-    ) -> str:
+    ) -> ToolResult:
         if not question:
-            return "[错误] question 参数不能为空"
+            return _fail("[错误] question 参数不能为空", error_code="VALIDATION_ERROR")
 
         options = options or []
         validated = []
@@ -76,7 +84,7 @@ class AskUserQuestionTool(Tool):
                 else:
                     choice = input("请选择: ").strip()
             except (EOFError, KeyboardInterrupt):
-                return "[系统] 用户取消输入。"
+                return _fail("[系统] 用户取消输入。", error_code="CANCELLED")
 
             if not choice:
                 print("输入不能为空，请重新选择。")
@@ -101,22 +109,22 @@ class AskUserQuestionTool(Tool):
                 if invalid:
                     print(f"无效选项: {', '.join(invalid)}，请重新选择。")
                     continue
-                return f"[用户选择] {', '.join(selected_labels)}"
+                return _ok(f"[用户选择] {', '.join(selected_labels)}")
             else:
                 try:
                     idx = int(choice)
                     if idx == 0:
                         custom = input("请输入你的回答: ").strip()
-                        return f"[用户回答] {custom}"
+                        return _ok(f"[用户回答] {custom}")
                     elif 1 <= idx <= len(validated):
                         label = validated[idx - 1]["label"]
-                        return f"[用户选择] {label}"
+                        return _ok(f"[用户选择] {label}")
                     else:
                         print("无效选项，请重新选择。")
                         continue
                 except ValueError:
                     # 用户直接输入了文本
-                    return f"[用户回答] {choice}"
+                    return _ok(f"[用户回答] {choice}")
 
 
 class AgentTool(Tool):
@@ -209,20 +217,30 @@ class AgentTool(Tool):
         subagent_type: str = "coder",
         resume: str = "",
         run_in_background: bool = False,
-    ) -> str:
+    ) -> ToolResult:
         if not prompt:
-            return "[错误] prompt 参数不能为空"
+            return _fail("[错误] prompt 参数不能为空", error_code="VALIDATION_ERROR")
         if not description:
-            return "[错误] description 参数不能为空（请提供 3-5 个词的简短说明）"
+            return _fail(
+                "[错误] description 参数不能为空（请提供 3-5 个词的简短说明）",
+                error_code="VALIDATION_ERROR",
+            )
 
-        if subagent_type not in ("coder", "explore", "plan"):
-            return f"[错误] 不支持的 subagent_type: {subagent_type!r}"
+        # resume 与 subagent_type 互斥：恢复已有实例时忽略 subagent_type
+        if not resume and subagent_type not in ("coder", "explore", "plan"):
+            return _fail(
+                f"[错误] 不支持的 subagent_type: {subagent_type!r}",
+                error_code="VALIDATION_ERROR",
+            )
 
         if self._llm is None and self._llm_factory is None:
-            return "[错误] Agent 工具未初始化 LLM，无法派发"
+            return _fail(
+                "[错误] Agent 工具未初始化 LLM，无法派发",
+                error_code="CONFIG_ERROR",
+            )
 
         instance_id = resume or None
-        return self._manager.dispatch(
+        result = self._manager.dispatch(
             agent_type=subagent_type,
             prompt=prompt,
             llm=self._llm,
@@ -234,3 +252,6 @@ class AgentTool(Tool):
             on_edit_proposal=self._on_edit_proposal,
             work_dir=self._parent_work_dir or self.work_dir,
         )
+        if isinstance(result, ToolResult):
+            return result
+        return _ok(result)

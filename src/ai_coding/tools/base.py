@@ -27,6 +27,43 @@ class ToolParameter:
     default: Any = None
 
 
+@dataclass
+class ToolResult:
+    """统一的工具执行结果.
+
+    所有工具执行后必须返回 ToolResult，调用方通过 success/error_code 做程序化
+    判断，data 用于承载返回给 LLM 的文本内容，便于日志记录和错误重试。
+    """
+
+    success: bool
+    data: str
+    error_code: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+    # 用于自动推断字符串结果的状态（保留给历史测试/序列化使用）
+    _ERROR_PREFIXES = ("[错误]", "[超时]", "[系统]")
+
+    @classmethod
+    def from_string(cls, text: str) -> "ToolResult":
+        """将遗留的字符串结果转换为 ToolResult.
+
+        如果字符串以常见错误前缀开头，则视为失败；否则视为成功。
+        保留给历史测试或序列化使用，ToolRegistry.execute 不再调用它。
+        """
+        success = not any(text.startswith(p) for p in cls._ERROR_PREFIXES)
+        return cls(success=success, data=text)
+
+    @classmethod
+    def ok(cls, data: str, metadata: Optional[Dict[str, Any]] = None) -> "ToolResult":
+        """构造成功结果."""
+        return cls(success=True, data=data, metadata=metadata)
+
+    @classmethod
+    def fail(cls, data: str, error_code: Optional[str] = None) -> "ToolResult":
+        """构造失败结果."""
+        return cls(success=False, data=data, error_code=error_code)
+
+
 class Tool(ABC):
     """工具抽象基类.
 
@@ -59,9 +96,9 @@ class Tool(ABC):
 
     def _resolve_path(self, path: str, must_exist: bool = False) -> "Path":
         """解析并校验路径位于工作目录沙箱内."""
-        from ai_coding.tools.sandbox import resolve_sandboxed_path
+        from ai_coding.tools.safety import resolve_workdir_path
 
-        return resolve_sandboxed_path(path, self.work_dir, must_exist=must_exist)
+        return resolve_workdir_path(path, self.work_dir, must_exist=must_exist)
 
     @property
     @abstractmethod
@@ -70,14 +107,14 @@ class Tool(ABC):
         ...
 
     @abstractmethod
-    def execute(self, **kwargs: Any) -> str:
+    def execute(self, **kwargs: Any) -> "ToolResult":
         """执行工具逻辑.
 
         Args:
             **kwargs: 由 LLM 提供的参数.
 
         Returns:
-            工具执行结果, 必须是字符串格式.
+            工具执行结果（ToolResult）。
 
         """
         ...
@@ -184,11 +221,15 @@ class Tool(ABC):
             ArgsSchema = create_model(f"{self.name.title()}Args")
 
         return StructuredTool.from_function(
-            func=self.execute,
+            func=self._execute_as_string,
             name=self.name,
             description=self.description,
             args_schema=ArgsSchema,
         )
+
+    def _execute_as_string(self, **kwargs: Any) -> str:
+        """供 LangChain 调用的兼容层，保证始终返回字符串."""
+        return self.execute(**kwargs).data
 
 
 class ToolRegistry:
@@ -232,20 +273,29 @@ class ToolRegistry:
             raise KeyError(f"未知工具: '{name}'. 可用工具: {self.list_tools()}")
         return self._tools[name]
 
-    def execute(self, name: str, arguments: Dict[str, Any]) -> str:
-        """执行指定工具.
+    def execute(self, name: str, arguments: Dict[str, Any]) -> ToolResult:
+        """执行指定工具并返回统一的 ToolResult.
 
         Args:
             name: 工具名称.
             arguments: 工具参数.
 
         Returns:
-            工具执行结果.
+            工具执行结果（结构化）.
+
+        Raises:
+            TypeError: 工具没有返回 ToolResult 时.
 
         """
         tool = self.get(name)
         validated_args = tool.validate_args(arguments)
-        return tool.execute(**validated_args)
+        result = tool.execute(**validated_args)
+        # 所有工具现在都应返回 ToolResult
+        if not isinstance(result, ToolResult):
+            raise TypeError(
+                f"工具 '{name}' 必须返回 ToolResult，实际返回 {type(result)!r}"
+            )
+        return result
 
     def list_tools(self) -> List[str]:
         """列出所有已注册的工具名称.

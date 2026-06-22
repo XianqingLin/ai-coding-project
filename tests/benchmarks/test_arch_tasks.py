@@ -101,13 +101,19 @@ def test_long_file_edit_task_solvable() -> None:
         '    """Return a list where each element is doubled."""\n'
         "    return [x * 2 for x in data]"
     )
+    blocks = (
+        "<<<<<<< SEARCH\n"
+        f"{old_string}\n"
+        "=======\n"
+        f"{new_string}\n"
+        ">>>>>>> REPLACE\n"
+    )
     responses = [
         mock_tool_call(
-            "edit_file",
+            "edit_file_blocks",
             {
                 "path": "data_processor.py",
-                "old_string": old_string,
-                "new_string": new_string,
+                "blocks": blocks,
             },
             content="fix process_data",
         ),

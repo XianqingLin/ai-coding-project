@@ -6,7 +6,6 @@ AgentState 是自我管理容量的短期记忆容器，跨轮次保留.
 - ContextCompressor 作为 AgentState 的容量管理工具，由 LangGraphAgent 显式调用
 """
 
-import os
 import time
 import uuid
 from pathlib import Path
@@ -108,9 +107,6 @@ class LangGraphAgent:
 
         # 流式运行取消标志
         self._stop_requested = False
-
-        # 待处理的 edit_proposal（前端可 apply 或 reject）
-        self._pending_edits: Dict[str, Dict[str, Any]] = {}
 
         # 唯一状态源：自我管理容量的短期记忆容器
         self.state: Optional[AgentState] = None
@@ -283,53 +279,12 @@ class LangGraphAgent:
             self.compact()
 
     def _handle_edit_proposal(self, proposal: Dict[str, Any]) -> None:
-        """内部处理 edit_proposal：缓存并透传给外部回调."""
-        edit_id = proposal.get("id", "")
-        if edit_id:
-            self._pending_edits[edit_id] = proposal
+        """内部处理 edit_proposal：透传给外部回调."""
         if self.on_edit_proposal is not None:
             try:
                 self.on_edit_proposal(proposal)
             except Exception:
                 logger.debug("edit_proposal 外部回调失败", exc_info=True)
-
-    def apply_edit(self, edit_id: str) -> bool:
-        """确认应用 edit_proposal.
-
-        当前实现中文件已被工具写入，apply 仅表示用户确认保留。
-        """
-        if edit_id not in self._pending_edits:
-            return False
-        del self._pending_edits[edit_id]
-        return True
-
-    def reject_edit(self, edit_id: str) -> bool:
-        """拒绝 edit_proposal，将文件恢复为旧内容.
-
-        若旧内容为空且文件原本不存在，则删除文件。
-        """
-        if edit_id not in self._pending_edits:
-            return False
-        proposal = self._pending_edits.pop(edit_id)
-        path = proposal.get("path", "")
-        old_content = proposal.get("old_content", "")
-        if not path:
-            return False
-        try:
-            if old_content == "":
-                # 原本就不存在，新写入后又被拒绝，删除文件
-                if os.path.exists(path):
-                    os.remove(path)
-                return True
-            directory = os.path.dirname(path)
-            if directory and not os.path.exists(directory):
-                os.makedirs(directory)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(old_content)
-            return True
-        except Exception as e:
-            logger.error(f"恢复文件失败 {path}: {e}", exc_info=True)
-            return False
 
     def register_approval_future(self, request_id: str, future: Any) -> Any:
         """注册一个等待前端响应的 approval future.

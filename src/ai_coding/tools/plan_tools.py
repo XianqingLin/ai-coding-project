@@ -6,9 +6,18 @@ Plan 模式下 Write/Edit 只允许操作计划文件，TaskStop 被拦截。
 
 import time
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
-from ai_coding.tools.base import Tool, ToolParameter
+from ai_coding.tools.base import Tool, ToolParameter, ToolResult
+
+
+def _ok(data: str, metadata: Optional[Dict[str, Any]] = None) -> ToolResult:
+    return ToolResult.ok(data, metadata=metadata)
+
+
+def _fail(data: str, error_code: Optional[str] = None) -> ToolResult:
+    return ToolResult.fail(data, error_code=error_code)
+
 
 # 保留词（case-insensitive）
 _RESERVED_LABELS = {"approve", "reject", "reject and exit", "revise"}
@@ -20,7 +29,7 @@ class EnterPlanModeTool(Tool):
     name = "enter_plan_mode"
     requires_approval = False
     description = (
-        "进入 Plan 模式。进入后只能使用 write_file 或 edit_file 修改计划文件，"
+        "进入 Plan 模式。进入后只能使用 write_file 或 edit_file_blocks 修改计划文件，"
         "task_stop 工具将被拦截，其他工具仍按正常权限规则处理。"
         "完成计划后调用 exit_plan_mode 提交计划。"
     )
@@ -29,7 +38,7 @@ class EnterPlanModeTool(Tool):
     def parameters(self) -> List[ToolParameter]:
         return []
 
-    def execute(self) -> str:  # type: ignore[override]
+    def execute(self) -> ToolResult:  # type: ignore[override]
         plan_dir = Path(self.work_dir) / ".kimi" / "plans"
         plan_dir.mkdir(parents=True, exist_ok=True)
         ts = int(time.time())
@@ -38,11 +47,11 @@ class EnterPlanModeTool(Tool):
         with plan_path.open("w", encoding="utf-8") as f:
             f.write("# Plan\n\n")
 
-        return (
+        return _ok(
             f"[成功] 已进入 Plan 模式。\n"
             f"计划文件路径: {plan_path}\n"
             f"工作流指引:\n"
-            f"1. 只能使用 write_file 或 edit_file 修改计划文件 '{plan_path}'\n"
+            f"1. 只能使用 write_file 或 edit_file_blocks 修改计划文件 '{plan_path}'\n"
             f"2. task_stop 工具在 Plan 模式下不可用\n"
             f"3. 完成计划后调用 exit_plan_mode 提交计划\n"
             f"4. 其他工具（如 read_file, execute_command 等）仍可正常使用"
@@ -74,11 +83,11 @@ class ExitPlanModeTool(Tool):
 
     def execute(  # type: ignore[override]
         self, options: Optional[List[Any]] = None
-    ) -> str:
+    ) -> ToolResult:
         validated = self._validate_options(options or [])
         if isinstance(validated, str) and validated.startswith("[错误]"):
-            return validated
-        return ""
+            return _fail(validated, error_code="VALIDATION_ERROR")
+        return _ok("")
 
     def _validate_options(self, options: List[Any]) -> str:
         """验证 options 格式，返回错误消息或空字符串表示通过."""

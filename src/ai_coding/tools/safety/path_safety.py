@@ -1,4 +1,4 @@
-"""路径沙箱工具.
+"""路径安全校验工具.
 
 限制工具只能访问当前工作目录内的文件和目录，防止 LLM 通过绝对路径
 或 .. 遍历访问工作区之外的文件系统。
@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Optional
 
 
-class SandboxViolationError(ValueError):
-    """路径超出工作目录沙箱范围时抛出."""
+class PathBoundaryError(ValueError):
+    """路径超出工作目录允许范围时抛出."""
 
     pass
 
@@ -24,13 +24,13 @@ def _is_path_within_work_dir(target: Path, work: Path) -> bool:
         return False
 
 
-def resolve_sandboxed_path(
+def resolve_workdir_path(
     path: str,
     work_dir: str,
     must_exist: bool = False,
     allow_abs_within_work_dir: bool = True,
 ) -> Path:
-    """解析路径并校验其是否位于工作目录沙箱内.
+    """解析路径并校验其是否位于工作目录范围内.
 
     Args:
         path: 用户传入的路径（相对或绝对）.
@@ -42,7 +42,7 @@ def resolve_sandboxed_path(
         解析后的绝对路径.
 
     Raises:
-        SandboxViolationError: 路径超出工作目录范围.
+        PathBoundaryError: 路径超出工作目录范围.
         ValueError: 路径为空或无法解析.
     """
     if not path:
@@ -55,20 +55,20 @@ def resolve_sandboxed_path(
 
     raw = os.path.expanduser(path)
 
-    # 拒绝包含 .. 或 . 的相对遍历（先按字符串判断）
+    # 拒绝包含 '..' 的相对遍历（先按字符串判断）
     parts = Path(raw).parts
     if ".." in parts:
-        raise SandboxViolationError(f"路径包含 '..' 遍历，被拒绝: {path}")
+        raise PathBoundaryError(f"路径包含 '..' 遍历，被拒绝: {path}")
 
     if os.path.isabs(raw):
         if not allow_abs_within_work_dir:
-            raise SandboxViolationError(f"不允许使用绝对路径: {path}")
+            raise PathBoundaryError(f"不允许使用绝对路径: {path}")
         target = Path(raw).resolve()
     else:
         target = (work / raw).resolve()
 
     if not _is_path_within_work_dir(target, work):
-        raise SandboxViolationError(
+        raise PathBoundaryError(
             f"路径 '{path}' 超出工作目录 '{work_dir}' 范围，拒绝访问"
         )
 
@@ -78,7 +78,7 @@ def resolve_sandboxed_path(
     return target
 
 
-def resolve_sandboxed_cwd(
+def resolve_workdir_cwd(
     cwd: Optional[str],
     work_dir: str,
 ) -> Path:
@@ -88,4 +88,4 @@ def resolve_sandboxed_cwd(
     """
     if not cwd:
         return Path(work_dir).expanduser().resolve()
-    return resolve_sandboxed_path(cwd, work_dir, must_exist=True)
+    return resolve_workdir_path(cwd, work_dir, must_exist=True)

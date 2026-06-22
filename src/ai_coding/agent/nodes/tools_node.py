@@ -121,7 +121,7 @@ def create_tools_node(
 
     Args:
         tool_registry: 工具注册表，用于查找和执行工具.
-        on_edit_proposal: 当 write_file / edit_file 产生修改时，回调 edit_proposal.
+        on_edit_proposal: 当 write_file / edit_file_blocks 产生修改时，回调 edit_proposal.
 
     Returns:
         符合 LangGraph 节点签名的 callable.
@@ -219,7 +219,7 @@ def create_tools_node(
             args = normalize_tool_args(args)
 
             # ---------- Plan 模式约束 ----------
-            if plan_mode and name in ("write_file", "edit_file"):
+            if plan_mode and name in ("write_file", "edit_file_blocks"):
                 target = args.get("path", "")
                 if target != plan_file_path:
                     tool_messages.append(
@@ -247,8 +247,10 @@ def create_tools_node(
             # ---------- enter_plan_mode 特殊处理 ----------
             if name == "enter_plan_mode":
                 result = tool_registry.execute(name, args)
-                tool_messages.append(ToolMessage(content=result, tool_call_id=tool_id))
-                extracted = _extract_plan_path(result)
+                tool_messages.append(
+                    ToolMessage(content=result.data, tool_call_id=tool_id)
+                )
+                extracted = _extract_plan_path(result.data)
                 if extracted:
                     plan_mode = True
                     plan_file_path = extracted
@@ -327,32 +329,30 @@ def create_tools_node(
                 multi_select = args.get("multi_select", False)
                 ask_tool = tool_registry.get("ask_user_question")
                 if isinstance(ask_tool, AskUserQuestionTool):
-                    result = ask_tool.execute(
+                    ask_result = ask_tool.execute(
                         question=question,
                         options=options,
                         multi_select=multi_select,
                     )
                     tool_messages.append(
-                        ToolMessage(content=result, tool_call_id=tool_id)
+                        ToolMessage(content=ask_result.data, tool_call_id=tool_id)
                     )
                 continue
 
             # ---------- 常规工具执行 ----------
-            # write_file / edit_file 需要记录旧内容以生成 diff
+            # write_file / edit_file_blocks 需要记录旧内容以生成 diff
             old_content = ""
-            if name == "write_file":
-                old_content = _read_file_raw(args.get("path", ""))
-            elif name == "edit_file":
+            if name in ("write_file", "edit_file_blocks"):
                 old_content = _read_file_raw(args.get("path", ""))
 
             result = tool_registry.execute(name, args)
-            tool_messages.append(ToolMessage(content=result, tool_call_id=tool_id))
+            tool_messages.append(ToolMessage(content=result.data, tool_call_id=tool_id))
 
             # 根据工具类型更新文件快照并生成 edit_proposal
             if name == "read_file":
                 path = args.get("path", "")
                 if path:
-                    _, content = _parse_read_file_result(result)
+                    _, content = _parse_read_file_result(result.data)
                     file_snapshots[path] = content
                     logger.debug(f"[FileSnapshot] 读取更新: {path}")
 
@@ -365,12 +365,12 @@ def create_tools_node(
                     logger.debug(f"[FileSnapshot] 写入更新: {path}")
                     _emit_edit_proposal(name, path, old_content, new_content, args)
 
-            elif name == "edit_file":
+            elif name == "edit_file_blocks":
                 path = args.get("path", "")
-                if path and result.startswith("[成功]"):
+                if path and result.success:
                     try:
                         read_result = tool_registry.execute("read_file", {"path": path})
-                        _, new_content = _parse_read_file_result(read_result)
+                        _, new_content = _parse_read_file_result(read_result.data)
                         file_snapshots[path] = new_content
                         logger.debug(f"[FileSnapshot] 编辑后刷新: {path}")
                         _emit_edit_proposal(name, path, old_content, new_content, args)

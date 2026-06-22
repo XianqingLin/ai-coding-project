@@ -3,9 +3,17 @@
 Agent 用于自我管理子任务进度，提升复杂任务的可观测性.
 """
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
-from ai_coding.tools.base import Tool, ToolParameter
+from ai_coding.tools.base import Tool, ToolParameter, ToolResult
+
+
+def _ok(data: str, metadata: Optional[Dict[str, Any]] = None) -> ToolResult:
+    return ToolResult.ok(data, metadata=metadata)
+
+
+def _fail(data: str, error_code: Optional[str] = None) -> ToolResult:
+    return ToolResult.fail(data, error_code=error_code)
 
 
 class TodoTool(Tool):
@@ -63,14 +71,17 @@ class TodoTool(Tool):
 
     def execute(  # type: ignore[override]
         self, action: str, task: str = "", index: Optional[int] = None
-    ) -> str:
+    ) -> ToolResult:
         action = action.lower().strip()
 
         if action == "add":
             if not task:
-                return "[错误] action=add 时必须提供 task 参数"
+                return _fail(
+                    "[错误] action=add 时必须提供 task 参数",
+                    error_code="VALIDATION_ERROR",
+                )
             self._todos.append({"task": task, "done": False})
-            return f"[待办] 已添加: {task} (当前共 {len(self._todos)} 项)"
+            return _ok(f"[待办] 已添加: {task} (当前共 {len(self._todos)} 项)")
 
         if action == "complete":
             return self._mark_done(task=task, index=index)
@@ -83,68 +94,98 @@ class TodoTool(Tool):
 
         if action == "list":
             if not self._todos:
-                return "当前无待办任务。"
+                return _ok("当前无待办任务。")
             lines = ["任务列表:"]
             done_count = sum(1 for t in self._todos if t["done"])
             for i, t in enumerate(self._todos, 1):
                 mark = "[x]" if t["done"] else "[ ]"
                 lines.append(f"  {mark} {i}. {t['task']}")
             lines.append(f"\n进度: {done_count}/{len(self._todos)} 已完成")
-            return "\n".join(lines)
+            return _ok("\n".join(lines))
 
-        return f"[错误] 未知的 action: {action}"
+        return _fail(f"[错误] 未知的 action: {action}", error_code="VALIDATION_ERROR")
 
-    def _mark_done(self, task: str = "", index: Optional[int] = None) -> str:
+    def _mark_done(self, task: str = "", index: Optional[int] = None) -> ToolResult:
         """标记任务为已完成."""
         if index is not None:
             idx = index - 1
             if 0 <= idx < len(self._todos):
                 self._todos[idx]["done"] = True
-                return f"[完成] {self._todos[idx]['task']}"
-            return f"[错误] 序号 {index} 超出范围 (1-{len(self._todos)})"
+                return _ok(f"[完成] {self._todos[idx]['task']}")
+            return _fail(
+                f"[错误] 序号 {index} 超出范围 (1-{len(self._todos)})",
+                error_code="VALIDATION_ERROR",
+            )
 
         if task:
             for i, t in enumerate(self._todos):
                 if not t["done"] and task.lower() in t["task"].lower():
                     self._todos[i]["done"] = True
-                    return f"[完成] {t['task']}"
-            return f"[错误] 未找到匹配的任务: {task}"
+                    return _ok(f"[完成] {t['task']}")
+            return _fail(
+                f"[错误] 未找到匹配的任务: {task}",
+                error_code="VALIDATION_ERROR",
+            )
 
-        return "[错误] action=complete 时需要提供 index 或 task 参数"
+        return _fail(
+            "[错误] action=complete 时需要提供 index 或 task 参数",
+            error_code="VALIDATION_ERROR",
+        )
 
-    def _remove(self, task: str = "", index: Optional[int] = None) -> str:
+    def _remove(self, task: str = "", index: Optional[int] = None) -> ToolResult:
         """删除任务."""
         if index is not None:
             idx = index - 1
             if 0 <= idx < len(self._todos):
                 removed = self._todos.pop(idx)
-                return f"[删除] {removed['task']}"
-            return f"[错误] 序号 {index} 超出范围 (1-{len(self._todos)})"
+                return _ok(f"[删除] {removed['task']}")
+            return _fail(
+                f"[错误] 序号 {index} 超出范围 (1-{len(self._todos)})",
+                error_code="VALIDATION_ERROR",
+            )
 
         if task:
             for i, t in enumerate(self._todos):
                 if task.lower() in t["task"].lower():
                     removed = self._todos.pop(i)
-                    return f"[删除] {removed['task']}"
-            return f"[错误] 未找到匹配的任务: {task}"
+                    return _ok(f"[删除] {removed['task']}")
+            return _fail(
+                f"[错误] 未找到匹配的任务: {task}",
+                error_code="VALIDATION_ERROR",
+            )
 
-        return "[错误] action=remove 时需要提供 index 或 task 参数"
+        return _fail(
+            "[错误] action=remove 时需要提供 index 或 task 参数",
+            error_code="VALIDATION_ERROR",
+        )
 
-    def _update(self, new_task: str = "", index: Optional[int] = None) -> str:
+    def _update(self, new_task: str = "", index: Optional[int] = None) -> ToolResult:
         """修改任务描述."""
         if not new_task:
-            return "[错误] action=update 时必须提供 task 参数作为新描述"
+            return _fail(
+                "[错误] action=update 时必须提供 task 参数作为新描述",
+                error_code="VALIDATION_ERROR",
+            )
 
         if index is not None:
             idx = index - 1
             if 0 <= idx < len(self._todos):
                 old = self._todos[idx]["task"]
                 self._todos[idx]["task"] = new_task
-                return f"[更新] {old} → {new_task}"
-            return f"[错误] 序号 {index} 超出范围 (1-{len(self._todos)})"
+                return _ok(f"[更新] {old} → {new_task}")
+            return _fail(
+                f"[错误] 序号 {index} 超出范围 (1-{len(self._todos)})",
+                error_code="VALIDATION_ERROR",
+            )
 
         if new_task:
             # update 不支持纯文本匹配（容易误操作），必须提供 index
-            return "[错误] action=update 时必须提供 index 参数指定要修改的任务"
+            return _fail(
+                "[错误] action=update 时必须提供 index 参数指定要修改的任务",
+                error_code="VALIDATION_ERROR",
+            )
 
-        return "[错误] action=update 时需要提供 index 和 task 参数"
+        return _fail(
+            "[错误] action=update 时需要提供 index 和 task 参数",
+            error_code="VALIDATION_ERROR",
+        )

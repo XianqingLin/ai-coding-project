@@ -8,10 +8,20 @@ import fnmatch
 import glob
 import os
 import re
+from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-from ai_coding.tools.base import Tool, ToolParameter
+from ai_coding.tools.base import Tool, ToolParameter, ToolResult
+
+
+def _ok(data: str, metadata: Optional[Dict[str, Any]] = None) -> ToolResult:
+    return ToolResult.ok(data, metadata=metadata)
+
+
+def _fail(data: str, error_code: Optional[str] = None) -> ToolResult:
+    return ToolResult.fail(data, error_code=error_code)
 
 
 class ReadFileTool(Tool):
@@ -46,18 +56,20 @@ class ReadFileTool(Tool):
 
     def execute(  # type: ignore[override]
         self, path: str, line_offset: int = 1, n_lines: int = 300
-    ) -> str:
-        try:
-            target = self._resolve_path(path, must_exist=True)
-        except Exception as e:
-            return f"[错误] {e}"
-        path = str(target)
+    ) -> ToolResult:
+        ok, result = _resolve_path_or_error(self, path, must_exist=True)
+        if not ok:
+            return _fail(str(result), error_code="PATH_BOUNDARY_ERROR")
+        path = str(result)
 
         if not os.path.exists(path):
-            return f"[错误] 文件不存在: {path}"
+            return _fail(f"[错误] 文件不存在: {path}", error_code="FILE_NOT_FOUND")
 
         if os.path.isdir(path):
-            return f"[错误] '{path}' 是一个目录, 请使用 list_dir 工具查看目录内容."
+            return _fail(
+                f"[错误] '{path}' 是一个目录, 请使用 list_dir 工具查看目录内容.",
+                error_code="FILE_NOT_FOUND",
+            )
 
         try:
             line_offset = max(1, int(line_offset))
@@ -91,12 +103,15 @@ class ReadFileTool(Tool):
                 next_offset = min(end_idx + 1, total_lines)
                 result += f", 超过 1000 行, 可用 line_offset={next_offset} 继续读取"
             result += ")"
-            return result
+            return _ok(result)
 
         except UnicodeDecodeError:
-            return f"[错误] 无法以文本格式读取 '{path}', 可能是二进制文件."
+            return _fail(
+                f"[错误] 无法以文本格式读取 '{path}', 可能是二进制文件.",
+                error_code="EXECUTION_ERROR",
+            )
         except Exception as e:
-            return f"[错误] 读取文件失败: {e}"
+            return _fail(f"[错误] 读取文件失败: {e}", error_code="EXECUTION_ERROR")
 
 
 class WriteFileTool(Tool):
@@ -117,12 +132,11 @@ class WriteFileTool(Tool):
             ToolParameter("content", "string", "要写入的文件内容"),
         ]
 
-    def execute(self, path: str, content: str) -> str:  # type: ignore[override]
-        try:
-            target = self._resolve_path(path, must_exist=False)
-        except Exception as e:
-            return f"[错误] {e}"
-        path = str(target)
+    def execute(self, path: str, content: str) -> ToolResult:  # type: ignore[override]
+        ok, result = _resolve_path_or_error(self, path, must_exist=False)
+        if not ok:
+            return _fail(str(result), error_code="PATH_BOUNDARY_ERROR")
+        path = str(result)
 
         try:
             directory = os.path.dirname(path)
@@ -132,20 +146,154 @@ class WriteFileTool(Tool):
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
 
-            return f"[成功] 文件已写入: {path} ({len(content)} 字符)"
+            return _ok(f"[成功] 文件已写入: {path} ({len(content)} 字符)")
         except Exception as e:
-            return f"[错误] 写入文件失败: {e}"
+            return _fail(f"[错误] 写入文件失败: {e}", error_code="EXECUTION_ERROR")
 
 
-class EditFile(Tool):
-    """在文件中查找并替换指定内容."""
+def _resolve_path_or_error(
+    tool: Tool, path: str, must_exist: bool = False
+) -> Tuple[bool, Union[Path, str]]:
+    """解析路径，失败时返回错误字符串.
 
-    name = "edit_file"
+    Returns:
+        (success, result): success 为 True 时 result 为解析后的 Path；
+        为 False 时 result 为错误消息字符串。
+    """
+    try:
+        return True, tool._resolve_path(path, must_exist=must_exist)
+    except Exception as e:
+        return False, f"[错误] {e}"
+
+
+def _find_best_match(content: str, old_string: str) -> tuple:
+    """寻找最接近 old_string 的匹配片段.
+
+    基于 difflib.SequenceMatcher 在 content 中滑动窗口搜索，
+    支持行数相近的候选（old_len ± 1）。
+    """
+    if not old_string.strip():
+        return None, 0.0
+
+    if old_string in content:
+        return old_string, 1.0
+
+    content_lines = content.splitlines()
+    old_lines = old_string.splitlines()
+    old_len = len(old_lines)
+
+    if old_len == 0:
+        return None, 0.0
+
+    best_match = None
+    best_ratio = 0.0
+
+    for i in range(len(content_lines) - old_len + 1):
+        candidate = "\n".join(content_lines[i : i + old_len])
+        ratio = difflib.SequenceMatcher(None, old_string, candidate).ratio()
+        if ratio > best_ratio:
+            best_ratio = ratio
+            best_match = candidate
+
+    for window in [old_len - 1, old_len + 1]:
+        if window <= 0:
+            continue
+        for i in range(len(content_lines) - window + 1):
+            candidate = "\n".join(content_lines[i : i + window])
+            ratio = difflib.SequenceMatcher(None, old_string, candidate).ratio()
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_match = candidate
+
+    return best_match, best_ratio
+
+
+@dataclass
+class SearchReplaceBlock:
+    """一个 SEARCH/REPLACE 编辑块."""
+
+    search: str
+    replace: str
+    raw: str
+
+
+class SearchReplaceError(ValueError):
+    """SEARCH/REPLACE 编辑块解析或校验错误."""
+
+
+def _parse_search_replace_blocks(text: str) -> List[SearchReplaceBlock]:
+    """解析文本中的 SEARCH/REPLACE 编辑块.
+
+    支持的格式（每个块独立，一个字符串可包含多个块）:
+
+        <<<<<<< SEARCH
+        要被替换的旧内容
+        =======
+        替换后的新内容
+        >>>>>>> REPLACE
+
+    每个分隔符必须单独占一行。保留 search / replace 中的原始换行符与缩进。
+    """
+    blocks: List[SearchReplaceBlock] = []
+    # splitlines(keepends=True) 保留 \n 或 \r\n，确保替换时与文件内容精确匹配
+    lines = text.splitlines(keepends=True)
+    i = 0
+    n = len(lines)
+
+    while i < n:
+        # 查找块起始标记
+        while i < n and lines[i].rstrip("\r\n") != "<<<<<<< SEARCH":
+            i += 1
+        if i >= n:
+            break
+        start_line = i
+        i += 1
+
+        # 收集 search 内容
+        search_lines: List[str] = []
+        while i < n and lines[i].rstrip("\r\n") != "=======":
+            search_lines.append(lines[i])
+            i += 1
+        if i >= n:
+            raise SearchReplaceError("编辑块缺少 '=======' 分隔符")
+        i += 1  # 跳过 =======
+
+        # 收集 replace 内容
+        replace_lines: List[str] = []
+        while i < n and lines[i].rstrip("\r\n") != ">>>>>>> REPLACE":
+            replace_lines.append(lines[i])
+            i += 1
+        if i >= n:
+            raise SearchReplaceError("编辑块缺少 '>>>>>>> REPLACE' 结束符")
+        i += 1  # 跳过 >>>>>>> REPLACE
+
+        search = "".join(search_lines)
+        replace = "".join(replace_lines)
+        raw = "".join(lines[start_line:i])
+        blocks.append(SearchReplaceBlock(search=search, replace=replace, raw=raw))
+
+    if not blocks:
+        raise SearchReplaceError("未找到任何 SEARCH/REPLACE 编辑块")
+
+    return blocks
+
+
+class SearchReplaceTool(Tool):
+    """使用 SEARCH/REPLACE 编辑块安全地修改文件."""
+
+    name = "edit_file_blocks"
     requires_approval = True
     description = (
-        "在文件中查找并替换指定内容块. 这是修改现有文件的核心工具.\n"
-        "old_string 必须在文件中**唯一出现**；如果不唯一，系统会提示你增加上下文.\n"
-        "当你已经确认要修改的内容后，立即使用此工具执行修改，不要继续阅读文件."
+        "使用 SEARCH/REPLACE 编辑块修改现有文件. 这是修改现有文件时最推荐的方式.\n"
+        "每个编辑块包含一段必须在文件中唯一出现的旧内容，以及替换后的新内容.\n"
+        "一个调用可包含多个编辑块，系统会先校验所有块，再原子性地写入文件.\n"
+        "编辑块格式如下（每个块以 <<<<<<< SEARCH 开始，>>>>>>> REPLACE 结束）:\n"
+        "<<<<<<< SEARCH\n"
+        "要替换的旧内容（必须在文件中唯一出现）\n"
+        "=======\n"
+        "替换后的新内容\n"
+        ">>>>>>> REPLACE\n"
+        "如果旧内容不存在或不唯一，系统会返回详细错误并提示修正."
     )
 
     @property
@@ -153,101 +301,72 @@ class EditFile(Tool):
         return [
             ToolParameter("path", "string", "要编辑的文件路径"),
             ToolParameter(
-                "old_string", "string", "要被替换的旧内容（必须在文件中唯一出现）"
+                "blocks",
+                "string",
+                "一个或多个 SEARCH/REPLACE 编辑块，按顺序依次应用",
             ),
-            ToolParameter("new_string", "string", "用于替换的新内容"),
         ]
 
-    @staticmethod
-    def _find_best_match(content: str, old_string: str) -> tuple:
-        """寻找最接近的匹配片段."""
-        if not old_string.strip():
-            return None, 0.0
-
-        if old_string in content:
-            return old_string, 1.0
-
-        content_lines = content.splitlines()
-        old_lines = old_string.splitlines()
-        old_len = len(old_lines)
-
-        if old_len == 0:
-            return None, 0.0
-
-        best_match = None
-        best_ratio = 0.0
-
-        for i in range(len(content_lines) - old_len + 1):
-            candidate = "\n".join(content_lines[i : i + old_len])
-            ratio = difflib.SequenceMatcher(None, old_string, candidate).ratio()
-            if ratio > best_ratio:
-                best_ratio = ratio
-                best_match = candidate
-
-        for window in [old_len - 1, old_len + 1]:
-            if window <= 0:
-                continue
-            for i in range(len(content_lines) - window + 1):
-                candidate = "\n".join(content_lines[i : i + window])
-                ratio = difflib.SequenceMatcher(None, old_string, candidate).ratio()
-                if ratio > best_ratio:
-                    best_ratio = ratio
-                    best_match = candidate
-
-        return best_match, best_ratio
-
-    def execute(  # type: ignore[override]
-        self, path: str, old_string: str, new_string: str
-    ) -> str:
-        try:
-            target = self._resolve_path(path, must_exist=True)
-        except Exception as e:
-            return f"[错误] {e}"
-        path = str(target)
+    def execute(self, path: str, blocks: str) -> ToolResult:  # type: ignore[override]
+        ok, result = _resolve_path_or_error(self, path, must_exist=True)
+        if not ok:
+            return _fail(str(result), error_code="PATH_BOUNDARY_ERROR")
+        path = str(result)
 
         if not os.path.exists(path):
-            return f"[错误] 文件不存在: {path}"
+            return _fail(f"[错误] 文件不存在: {path}", error_code="FILE_NOT_FOUND")
+
+        try:
+            parsed_blocks = _parse_search_replace_blocks(blocks)
+        except SearchReplaceError as e:
+            return _fail(f"[错误] 编辑块格式错误: {e}", error_code="VALIDATION_ERROR")
 
         try:
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
+        except Exception as e:
+            return _fail(f"[错误] 读取文件失败: {e}", error_code="EXECUTION_ERROR")
 
-            if old_string not in content:
-                best_match, ratio = self._find_best_match(content, old_string)
-                msg = f"[错误] 在文件 '{path}' 中未找到精确匹配内容.\n\n"
+        # 校验每个 search 在文件中是否唯一存在
+        errors: List[str] = []
+        for idx, block in enumerate(parsed_blocks, start=1):
+            if not block.search:
+                errors.append(f"块 {idx}: SEARCH 内容不能为空")
+                continue
+            count = content.count(block.search)
+            if count == 0:
+                best_match, ratio = _find_best_match(content, block.search)
+                msg = f"块 {idx}: 未找到精确匹配内容"
                 if best_match and ratio > 0.3:
-                    msg += f"系统找到最接近的匹配（相似度 {ratio*100:.1f}%）:\n"
-                    msg += f"{'-'*40}\n{best_match}\n{'-'*40}\n\n"
-                    msg += "请用上述精确文本作为 old_string 重试."
-                else:
-                    msg += "请重新确认 old_string 与文件内容完全一致（包括缩进和换行）."
-                return msg
+                    msg += f"（系统找到最接近的匹配，相似度 {ratio * 100:.1f}%）"
+                errors.append(msg)
+            elif count > 1:
+                errors.append(
+                    f"块 {idx}: 匹配内容不唯一，共出现 {count} 次，请增加上下文使其唯一"
+                )
 
-            occurrences = content.count(old_string)
-            if occurrences > 1:
-                contexts = []
-                idx = 0
-                for _ in range(min(occurrences, 3)):
-                    idx = content.find(old_string, idx)
-                    start = max(0, idx - 50)
-                    end = min(len(content), idx + len(old_string) + 50)
-                    contexts.append(content[start:end])
-                    idx += 1
-                msg = f"[错误] old_string 在文件中不唯一，共出现 {occurrences} 次.\n\n"
-                msg += "找到的位置:\n"
-                for i, ctx in enumerate(contexts, 1):
-                    msg += f"--- 位置 {i} ---\n{ctx}\n"
-                msg += "\n请增加更多上下文使 old_string 唯一后重试."
-                return msg
+        if errors:
+            detail = "\n".join(f"  - {e}" for e in errors)
+            return _fail(
+                f"[错误] 无法应用编辑块（文件: {path}）:\n{detail}",
+                error_code="VALIDATION_ERROR",
+            )
 
-            new_content = content.replace(old_string, new_string, 1)
+        # 按顺序应用所有编辑块
+        new_content = content
+        for block in parsed_blocks:
+            new_content = new_content.replace(block.search, block.replace, 1)
 
+        try:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(new_content)
-
-            return f"[成功] 文件已编辑: {path}"
         except Exception as e:
-            return f"[错误] 编辑文件失败: {e}"
+            return _fail(f"[错误] 写入文件失败: {e}", error_code="EXECUTION_ERROR")
+
+        return _ok(
+            f"[成功] 文件已编辑: {path}（应用 {len(parsed_blocks)} 个编辑块，"
+            f"原 {len(content)} 字符 → 新 {len(new_content)} 字符）"
+        )
 
 
 class GrepTool(Tool):
@@ -328,15 +447,14 @@ class GrepTool(Tool):
         path: str = ".",
         glob: Optional[str] = None,
         output_mode: str = "content",
-    ) -> str:
-        try:
-            target = self._resolve_path(path, must_exist=True)
-        except Exception as e:
-            return f"[错误] {e}"
-        path = str(target)
+    ) -> ToolResult:
+        ok, result = _resolve_path_or_error(self, path, must_exist=True)
+        if not ok:
+            return _fail(str(result), error_code="PATH_BOUNDARY_ERROR")
+        path = str(result)
 
         if not os.path.exists(path):
-            return f"[错误] 路径不存在: {path}"
+            return _fail(f"[错误] 路径不存在: {path}", error_code="FILE_NOT_FOUND")
 
         if not os.path.isdir(path):
             return self._search_file(path, pattern, output_mode)
@@ -344,7 +462,7 @@ class GrepTool(Tool):
         try:
             regex = re.compile(pattern)
         except re.error as e:
-            return f"[错误] 正则表达式无效: {e}"
+            return _fail(f"[错误] 正则表达式无效: {e}", error_code="VALIDATION_ERROR")
 
         globs = self._parse_glob(glob)
         results = []
@@ -387,16 +505,16 @@ class GrepTool(Tool):
 
         if output_mode == "files":
             if not files_matched:
-                return f"未找到匹配文件 (pattern={pattern!r})"
+                return _ok(f"未找到匹配文件 (pattern={pattern!r})")
             lines = sorted(f.replace(os.sep, "/") for f in files_matched)
             if len(lines) >= self.MAX_RESULTS:
                 lines.append(
                     f"... 结果超过 {self.MAX_RESULTS} 条, 已截断。请缩小搜索范围。"
                 )
-            return "匹配文件:\n" + "\n".join(lines)
+            return _ok("匹配文件:\n" + "\n".join(lines))
 
         if not results:
-            return f"未找到匹配 (pattern={pattern!r})"
+            return _ok(f"未找到匹配 (pattern={pattern!r})")
 
         lines = []
         for filepath, line_no, line_text in results[: self.MAX_RESULTS]:
@@ -410,7 +528,7 @@ class GrepTool(Tool):
                 f"... 结果超过 {self.MAX_RESULTS} 条, 已截断。请缩小 pattern 或加 glob 过滤。"
             )
 
-        return "\n".join(lines)
+        return _ok("\n".join(lines))
 
     def _parse_glob(self, glob_str: Optional[str] = None) -> List[str]:
         """解析 glob 字符串. 支持 '{a,b,c}' 语法."""
@@ -421,22 +539,22 @@ class GrepTool(Tool):
             return [g.strip() for g in glob_str[1:-1].split(",")]
         return [glob_str]
 
-    def _search_file(self, filepath: str, pattern: str, output_mode: str) -> str:
+    def _search_file(self, filepath: str, pattern: str, output_mode: str) -> ToolResult:
         try:
             regex = re.compile(pattern)
         except re.error as e:
-            return f"[错误] 正则表达式无效: {e}"
+            return _fail(f"[错误] 正则表达式无效: {e}", error_code="VALIDATION_ERROR")
         results = self._search_file_lines(filepath, regex, output_mode)
         if output_mode == "files":
-            return filepath if results else ""
+            return _ok(filepath if results else "")
         if not results:
-            return f"未找到匹配 (pattern={pattern!r})"
+            return _ok(f"未找到匹配 (pattern={pattern!r})")
         lines = []
         for _, line_no, line_text in results:
             if len(line_text) > self.MAX_LINE_LEN:
                 line_text = line_text[: self.MAX_LINE_LEN] + " ..."
             lines.append(f"{filepath.replace(os.sep, '/')}:{line_no} | {line_text}")
-        return "\n".join(lines)
+        return _ok("\n".join(lines))
 
     def _search_file_lines(
         self, filepath: str, regex: re.Pattern, output_mode: str
@@ -474,23 +592,25 @@ class ListDirTool(Tool):
             ),
         ]
 
-    def execute(self, path: str = ".") -> str:  # type: ignore[override]
-        try:
-            target = self._resolve_path(path, must_exist=True)
-        except Exception as e:
-            return f"[错误] {e}"
-        path = str(target)
+    def execute(self, path: str = ".") -> ToolResult:  # type: ignore[override]
+        ok, result = _resolve_path_or_error(self, path, must_exist=True)
+        if not ok:
+            return _fail(str(result), error_code="PATH_BOUNDARY_ERROR")
+        path = str(result)
 
         if not os.path.exists(path):
-            return f"[错误] 目录不存在: {path}"
+            return _fail(f"[错误] 目录不存在: {path}", error_code="FILE_NOT_FOUND")
 
         if not os.path.isdir(path):
-            return f"[错误] '{path}' 不是目录, 是一个文件."
+            return _fail(
+                f"[错误] '{path}' 不是目录, 是一个文件.",
+                error_code="FILE_NOT_FOUND",
+            )
 
         try:
             items = os.listdir(path)
             if not items:
-                return f"目录 '{path}' 为空."
+                return _ok(f"目录 '{path}' 为空.")
 
             dirs = []
             files = []
@@ -505,9 +625,9 @@ class ListDirTool(Tool):
             result = f"目录: {os.path.abspath(path)}\n{'='*50}\n"
             result += "\n".join(dirs + files)
             result += f"\n{'='*50}\n共 {len(dirs)} 个目录, {len(files)} 个文件"
-            return result
+            return _ok(result)
         except Exception as e:
-            return f"[错误] 列出目录失败: {e}"
+            return _fail(f"[错误] 列出目录失败: {e}", error_code="EXECUTION_ERROR")
 
     @staticmethod
     def _format_size(size: float) -> str:
@@ -547,49 +667,55 @@ class GlobTool(Tool):
             ),
         ]
 
-    def execute(self, pattern: str, path: str = ".") -> str:  # type: ignore[override]
-        try:
-            target = self._resolve_path(path, must_exist=True)
-        except Exception as e:
-            return f"[错误] {e}"
-        path = str(target)
+    def execute(  # type: ignore[override]
+        self, pattern: str, path: str = "."
+    ) -> ToolResult:
+        ok, result = _resolve_path_or_error(self, path, must_exist=True)
+        if not ok:
+            return _fail(str(result), error_code="PATH_BOUNDARY_ERROR")
+        path = str(result)
 
         if not os.path.exists(path):
-            return f"[错误] 路径不存在: {path}"
+            return _fail(f"[错误] 路径不存在: {path}", error_code="FILE_NOT_FOUND")
         if not os.path.isdir(path):
-            return f"[错误] '{path}' 不是目录"
+            return _fail(f"[错误] '{path}' 不是目录", error_code="FILE_NOT_FOUND")
 
         clean_pattern = pattern.strip()
 
         # 安全检查：拒绝纯通配符模式
         if clean_pattern in ("**", "*", "**/*", "*/**"):
-            return (
+            return _fail(
                 "[错误] 纯通配符模式被拒绝，请使用更具体的模式。\n"
-                "示例: '*.py'、'src/**/*.js'、'test_*.py'"
+                "示例: '*.py'、'src/**/*.js'、'test_*.py'",
+                error_code="VALIDATION_ERROR",
             )
 
         # 安全检查：拒绝花括号扩展
         if "{" in clean_pattern and "}" in clean_pattern:
-            return (
+            return _fail(
                 "[错误] 含花括号扩展（{a,b,c}）的模式被拒绝，请展开后分别查询。\n"
-                "示例: 将 '*.{py,js}' 拆分为两次查询 '*.py' 和 '*.js'"
+                "示例: 将 '*.{py,js}' 拆分为两次查询 '*.py' 和 '*.js'",
+                error_code="VALIDATION_ERROR",
             )
 
         # 拒绝包含 .. 的 glob 模式
         if ".." in clean_pattern:
-            return "[错误] glob 模式包含 '..'，被拒绝"
+            return _fail(
+                "[错误] glob 模式包含 '..'，被拒绝",
+                error_code="VALIDATION_ERROR",
+            )
 
         search_path = os.path.join(path, clean_pattern)
         try:
             matches = glob.glob(search_path, recursive=True)
         except Exception as e:
-            return f"[错误] glob 匹配失败: {e}"
+            return _fail(f"[错误] glob 匹配失败: {e}", error_code="EXECUTION_ERROR")
 
         # 过滤：只保留文件
         files = [p for p in matches if os.path.isfile(p)]
 
         if not files:
-            return f"未找到匹配文件 (pattern={clean_pattern!r}, path={path!r})"
+            return _ok(f"未找到匹配文件 (pattern={clean_pattern!r}, path={path!r})")
 
         # 按修改时间倒序排列
         files_with_mtime = []
@@ -618,4 +744,4 @@ class GlobTool(Tool):
                 f"... 结果超过 {self.MAX_RESULTS} 条，已截断。请缩小 pattern 范围。"
             )
 
-        return f"匹配文件 ({len(files_with_mtime)} 个):\n" + "\n".join(lines)
+        return _ok(f"匹配文件 ({len(files_with_mtime)} 个):\n" + "\n".join(lines))

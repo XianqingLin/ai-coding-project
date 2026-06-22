@@ -50,10 +50,10 @@ class _WriteTool(Tool):
         return f"wrote {path}"
 
 
-class _EditTool(Tool):
-    """需要审批的编辑工具."""
+class _EditFileBlocksTool(Tool):
+    """需要审批的编辑块工具."""
 
-    name = "edit_file"
+    name = "edit_file_blocks"
     description = "编辑文件"
     requires_approval = True
 
@@ -61,12 +61,11 @@ class _EditTool(Tool):
     def parameters(self) -> List[ToolParameter]:
         return [
             ToolParameter("path", "string", "文件路径"),
-            ToolParameter("old_string", "string", "旧字符串"),
-            ToolParameter("new_string", "string", "新字符串"),
+            ToolParameter("blocks", "string", "SEARCH/REPLACE 编辑块"),
         ]
 
-    def execute(self, path: str, old_string: str, new_string: str) -> str:
-        return f"edited {path}"
+    def execute(self, path: str, blocks: str) -> str:
+        return f"edited {path} with blocks"
 
 
 @pytest.fixture
@@ -75,7 +74,7 @@ def tool_registry() -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(_ReadTool())
     registry.register(_WriteTool())
-    registry.register(_EditTool())
+    registry.register(_EditFileBlocksTool())
     return registry
 
 

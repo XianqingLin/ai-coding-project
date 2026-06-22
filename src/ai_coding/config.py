@@ -69,3 +69,6 @@ LOG_LEVEL = get_env("LOG_LEVEL", "INFO")
 
 # Mock LLM 配置
 MOCK_INTERACTIVE = get_env_bool("MOCK_INTERACTIVE", False)
+
+# Shell 命令安全校验开关（默认开启）
+SHELL_SAFETY_STRICT = get_env_bool("SHELL_SAFETY_STRICT", True)
