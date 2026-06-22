@@ -23,6 +23,7 @@ from ai_coding.agent.events import (
     ThinkingStartEvent,
     ToolCallEvent,
 )
+from ai_coding.tools.base import ToolResult
 from ai_coding.tui.app_textual import AICodingApp
 
 pytestmark = pytest.mark.anyio
@@ -41,6 +42,7 @@ class _MockAgentService:
         self._sessions = [self._current]
         self._events: List[AgentEvent] = []
         self.last_input: str = ""
+        self.compact_called: bool = False
 
     @property
     def current_session_id(self) -> Optional[str]:
@@ -113,6 +115,11 @@ class _MockAgentService:
 
     def set_events(self, events: List[AgentEvent]) -> None:
         self._events = events
+
+    def compact_memory(self, session_id: Optional[str] = None):
+        """模拟记忆压缩."""
+        self.compact_called = True
+        return ToolResult.ok("Compacted 2 memories")
 
 
 @pytest.fixture
@@ -239,6 +246,21 @@ class TestAICodingAppCommands:
             await pilot.pause()
 
             assert app._exit
+            assert mock_service.compact_called is False
+
+    async def test_compact_command(self, mock_service: _MockAgentService) -> None:
+        """/compact 应显示压缩结果."""
+        app = AICodingApp(mock_service)
+        async with app.run_test() as pilot:
+            await _type_string(pilot, "/compact")
+            await pilot.press("enter")
+            await pilot.pause()
+
+            history = app.query_one("#history", VerticalScroll)
+            messages = list(history.query(".system-message"))
+            assert len(messages) >= 1
+            assert "Compacted 2 memories" in _static_text(messages[-1])
+            assert mock_service.compact_called is True
 
 
 class TestAICodingAppMessageRendering:

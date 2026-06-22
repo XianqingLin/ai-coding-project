@@ -26,7 +26,6 @@ from ai_coding.agent.events import (
     ToolCallEvent,
     UserInputEvent,
 )
-
 from benchmarks.loader import copy_initial_files
 from benchmarks.spec import BenchmarkReport, EvaluationSpec, TaskResult, TaskSpec
 
@@ -64,9 +63,7 @@ class BenchmarkRunner:
 
     def run_task(self, task: TaskSpec) -> TaskResult:
         """运行单个任务."""
-        work_dir = Path(
-            tempfile.mkdtemp(prefix=f"bench_{task.identifier}_")
-        ).resolve()
+        work_dir = Path(tempfile.mkdtemp(prefix=f"bench_{task.identifier}_")).resolve()
         try:
             if task.source_dir is not None:
                 copy_initial_files(task.source_dir, work_dir, task.initial_files)
@@ -111,16 +108,12 @@ class BenchmarkRunner:
             tool_calls_count += calls
 
             try:
-                exit_code, test_output = self._run_evaluation(
-                    task.evaluation, work_dir
-                )
+                exit_code, test_output = self._run_evaluation(task.evaluation, work_dir)
             except subprocess.TimeoutExpired as e:
                 status = "timeout"
                 error_message = f"判题脚本超时 ({task.evaluation.timeout}s)"
                 last_test_output = self._truncate(
-                    e.stdout.decode("utf-8", errors="replace")
-                    if e.stdout
-                    else "",
+                    e.stdout.decode("utf-8", errors="replace") if e.stdout else "",
                     4000,
                 )
                 break
@@ -149,7 +142,11 @@ class BenchmarkRunner:
             passed=passed,
             status=status,
             duration_seconds=duration,
-            actual_rounds=round_idx if passed or status in ("failed", "timeout") else task.max_rounds,
+            actual_rounds=(
+                round_idx
+                if passed or status in ("failed", "timeout")
+                else task.max_rounds
+            ),
             tool_calls_count=tool_calls_count,
             message_count=stats.get("message_count", 0),
             token_usage=context_usage.get("used_tokens", 0),

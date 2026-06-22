@@ -27,8 +27,12 @@ from ai_coding.config import DEFAULT_LLM_PROVIDER
 from ai_coding.environment import collect_environment_info
 from ai_coding.llm import create_lc_llm
 from ai_coding.logger import get_logger
+from ai_coding.memory import MemoryRetriever, MemoryStore
+from ai_coding.memory.extractor import MemoryExtractor
+from ai_coding.memory.models import MemoryScope
 from ai_coding.prompts import PromptContext
 from ai_coding.tools import create_default_tools
+from ai_coding.tools.base import ToolResult
 
 logger = get_logger(__name__)
 
@@ -53,6 +57,8 @@ class AgentService:
         auto_approve: bool = False,
         llm_factory: Optional[Callable[[], Any]] = None,
         enable_env_info: bool = True,
+        enable_memory: bool = True,
+        memory_root: Optional[Path] = None,
     ) -> None:
         """初始化 AgentService.
 
@@ -62,25 +68,96 @@ class AgentService:
             auto_approve: 是否自动批准工具调用.
             llm_factory: 可选的 LLM 工厂函数，主要用于测试注入 Mock LLM.
             enable_env_info: 是否在系统提示词中注入环境信息.
+            enable_memory: 是否启用长期记忆注入系统提示.
+            memory_root: 可选的记忆存储根目录，主要用于测试隔离.
         """
         self.work_dir = str(Path(work_dir).expanduser().resolve())
         self.llm_provider = llm_provider or DEFAULT_LLM_PROVIDER
         self.auto_approve = auto_approve
         self._llm_factory = llm_factory or (lambda: create_lc_llm(self.llm_provider))
 
-        prompt_context = None
-        if enable_env_info:
-            environment_info = collect_environment_info(
-                self.work_dir, self.llm_provider
-            )
-            prompt_context = PromptContext(environment_info=environment_info)
+        memory_summary = ""
+        if enable_memory:
+            memory_summary = self._build_memory_summary(self.work_dir, root=memory_root)
 
+        prompt_context = None
+        if enable_env_info or memory_summary:
+            environment_info = None
+            if enable_env_info:
+                environment_info = collect_environment_info(
+                    self.work_dir, self.llm_provider
+                )
+            prompt_context = PromptContext(
+                environment_info=environment_info,
+                memory_summary=memory_summary,
+            )
+
+        self._memory_root = memory_root
         self._sm = SessionManager(
             llm_factory=self._llm_factory,
             tools_factory=create_default_tools,
             auto_approve=self.auto_approve,
             work_dir=self.work_dir,
             prompt_context=prompt_context,
+        )
+
+    @staticmethod
+    def _build_memory_summary(work_dir: str, root: Optional[Path]) -> str:
+        """组合用户级与项目级记忆摘要."""
+        project_store = MemoryStore(
+            work_dir=work_dir, root=root, scope=MemoryScope.PROJECT
+        )
+        user_store = MemoryStore(root=root, scope=MemoryScope.USER)
+        return MemoryRetriever.combine_summaries(
+            {MemoryScope.USER: user_store, MemoryScope.PROJECT: project_store}
+        )
+
+    def compact_memory(self, session_id: Optional[str] = None) -> ToolResult:
+        """手动触发当前/指定会话的记忆压缩.
+
+        直接从 Agent 状态中提取完整消息历史，提取长期记忆并持久化，
+        不经过 Agent 工具调用与 approval 流程。
+        """
+        agent = self._get_agent_safe(session_id)
+        if agent is None:
+            return ToolResult.fail("[错误] 没有可用的 Agent 会话")
+
+        state = getattr(agent, "state", None)
+        if not isinstance(state, dict):
+            return ToolResult.fail("[错误] Agent 状态不可用")
+        messages = state.get("messages", [])
+        if not messages:
+            return ToolResult.ok("[成功] 当前会话没有消息，无需压缩")
+
+        extractor = MemoryExtractor(llm_factory=self._llm_factory)
+        sid = session_id or self.current_session_id or ""
+        try:
+            entries = extractor.extract(messages, session_id=sid)
+        except Exception as e:
+            logger.warning(f"记忆提取失败: {e}")
+            return ToolResult.fail(f"[错误] 记忆提取失败: {e}")
+
+        if not entries:
+            return ToolResult.ok("[成功] 本次对话未提取到新的长期记忆")
+
+        project_store = MemoryStore(
+            work_dir=self.work_dir,
+            root=self._memory_root,
+            scope=MemoryScope.PROJECT,
+        )
+        user_store = MemoryStore(
+            root=self._memory_root,
+            scope=MemoryScope.USER,
+        )
+        for entry in entries:
+            if entry.scope == MemoryScope.USER:
+                user_store.add_or_update(entry)
+            else:
+                project_store.add_or_update(entry)
+
+        summaries = "\n".join(f"- {e.content}" for e in entries)
+        return ToolResult.ok(
+            f"[成功] 已提取并保存 {len(entries)} 条长期记忆：\n{summaries}"
         )
 
     # ------------------------------------------------------------------ #

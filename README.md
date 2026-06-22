@@ -20,11 +20,12 @@
 
 | 指标 | 数据 |
 |------|------|
-| 单元测试 | **370+** 用例，覆盖率 **84%** |
+| 单元测试 | **442** 用例，覆盖率 **86%** |
 | 内置 Benchmark | **9** 个可量化任务（fibonacci / tetris / 5 个 architecture-stress） |
 | 工具数量 | **24** 个内置工具 |
+| 记忆机制 | 项目级记忆 + 跨项目用户偏好，通过 `/compact` 手动触发提取 |
 | 模型支持 | Kimi / OpenAI / Mock 三种 Provider |
-| 架构 | LangGraph ReAct + 审批门控 + 工作目录边界校验 + 上下文压缩 |
+| 架构 | LangGraph ReAct + 审批门控 + 工作目录边界校验 + 上下文压缩 + 长期记忆（含自动记忆压缩） |
 | 界面 | CLI + Textual 全屏 TUI |
 
 > 所有代码均通过 `black` / `isort` / `flake8` / `mypy` 检查，CI 在 Python 3.10/3.11/3.12 上全绿运行。
@@ -78,6 +79,7 @@ stateDiagram-v2
 | **LLM 工厂** | `llm/` | 封装 Kimi / OpenAI / Mock 三种模型 provider |
 | **持久化** | `persistence/` | AgentState、消息历史、执行记录的序列化与存储 |
 | **上下文压缩** | `agent/context_compressor.py` | 长对话时自动压缩上下文，控制 Token 开销 |
+| **长期记忆** | `memory/` | 从对话中提取并持久化用户偏好、项目规则，注入后续会话系统提示 |
 | **子 Agent** | `agent/sub_agent_manager.py` | 支持 coder/explore/plan 角色与前后台任务委派 |
 
 ### 安全机制
@@ -250,6 +252,7 @@ PYTHONIOENCODING=utf-8 python -m ai_coding ask \
 | `/session rename ID NAME` | 重命名会话 |
 | `/new` | 创建新会话 |
 | `/clear` | 清屏 |
+| `/compact` | 立即提取并保存当前会话的长期记忆 |
 | `/exit` | 退出程序 |
 
 ## 项目结构

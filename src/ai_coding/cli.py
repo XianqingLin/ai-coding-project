@@ -36,6 +36,35 @@ def _create_service(work_dir: str, auto_approve: bool = False) -> AgentService:
 
 
 @app.command()
+def init_agents_md(
+    work_dir: str = typer.Option(".", "--work-dir", "-w", help="项目工作目录"),
+    overwrite: bool = typer.Option(False, "--overwrite", help="覆盖已存在的 AGENTS.md"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="只输出生成内容，不写入文件"),
+) -> None:
+    """生成项目级 AGENTS.md 稳定记忆文档."""
+    setup_logging()
+    work_dir = _resolve_work_dir(work_dir)
+
+    from ai_coding.agents_md_generator import (
+        generate_agents_md,
+        write_agents_md,
+    )
+
+    content = generate_agents_md(Path(work_dir))
+
+    if dry_run:
+        typer.echo(content)
+        return
+
+    written = write_agents_md(Path(work_dir), content, overwrite=overwrite)
+    if written:
+        typer.echo(f"[成功] 已生成 {Path(work_dir) / 'AGENTS.md'}")
+    else:
+        typer.echo("[错误] AGENTS.md 已存在，使用 --overwrite 覆盖", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
 def ask(
     prompt: str = typer.Argument(..., help="要发送给 Agent 的指令"),
     work_dir: str = typer.Option(".", "--work-dir", "-w", help="项目工作目录"),

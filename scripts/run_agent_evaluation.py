@@ -100,7 +100,9 @@ class AgentEvaluator:
         if tool_lines:
             parts.append("Agent 调用的工具：\n" + "\n".join(tool_lines))
 
-        return "\n\n".join(parts) if parts else "（Agent 没有文本回复，但可能执行了工具）"
+        return (
+            "\n\n".join(parts) if parts else "（Agent 没有文本回复，但可能执行了工具）"
+        )
 
     def _build_evaluator_prompt(self, agent_turn_text: str) -> str:
         """构建自动评测员 prompt."""
@@ -167,7 +169,9 @@ class AgentEvaluator:
         """保存评估报告."""
         self.report_dir.mkdir(parents=True, exist_ok=True)
         timestamp = time.strftime("%Y%m%d_%H%M%S")
-        safe_task = "".join(c if c.isalnum() or c in "_-" else "_" for c in self.task_description[:30])
+        safe_task = "".join(
+            c if c.isalnum() or c in "_-" else "_" for c in self.task_description[:30]
+        )
         report_path = self.report_dir / f"eval_{status}_{safe_task}_{timestamp}.json"
 
         report = {
@@ -193,7 +197,9 @@ class AgentEvaluator:
         print(f"开始评估任务：{self.task_description}")
         print(f"工作目录：{self.work_dir}")
         print(f"最大轮次：{self.max_rounds}")
-        print(f"评测模式：{'交互模式（人工评测员）' if self.interactive else '自动模式（' + self.evaluator_model + '）'}")
+        print(
+            f"评测模式：{'交互模式（人工评测员）' if self.interactive else '自动模式（' + self.evaluator_model + '）'}"
+        )
         print("=" * 60)
 
         for i in range(self.max_rounds):
@@ -211,32 +217,47 @@ class AgentEvaluator:
                 tools_part = agent_turn_text.split("Agent 调用的工具：", 1)[-1].strip()
                 print(f"Tools: {tools_part[:300]}")
 
-            self.conversation.append({
-                "round": self.current_round,
-                "user": current_user_input,
-                "agent_output": agent_output,
-                "agent_turn_text": agent_turn_text,
-            })
+            self.conversation.append(
+                {
+                    "round": self.current_round,
+                    "user": current_user_input,
+                    "agent_output": agent_output,
+                    "agent_turn_text": agent_turn_text,
+                }
+            )
 
             # 获取评测员下一步输入
             if self.interactive:
                 evaluator_response = self._get_interactive_input(agent_turn_text)
             else:
                 evaluator_prompt = self._build_evaluator_prompt(agent_turn_text)
-                evaluator_response = self._get_auto_evaluator_response(evaluator_prompt).strip()
+                evaluator_response = self._get_auto_evaluator_response(
+                    evaluator_prompt
+                ).strip()
                 print(f"Evaluator: {evaluator_response[:300]}")
 
             # 处理特殊指令
             upper_response = evaluator_response.upper()
-            if upper_response.startswith("[DONE]") or "[TASK_COMPLETE]" in upper_response:
-                reason = evaluator_response.split("]", 1)[-1].strip() if "]" in evaluator_response else "任务完成"
+            if (
+                upper_response.startswith("[DONE]")
+                or "[TASK_COMPLETE]" in upper_response
+            ):
+                reason = (
+                    evaluator_response.split("]", 1)[-1].strip()
+                    if "]" in evaluator_response
+                    else "任务完成"
+                )
                 report_path = self._save_report("completed", reason)
                 print(f"\n[完成] {reason}")
                 print(f"报告已保存：{report_path}")
                 return True, reason
 
             if upper_response.startswith("[FAIL]") or "[TASK_FAILED]" in upper_response:
-                reason = evaluator_response.split("]", 1)[-1].strip() if "]" in evaluator_response else "任务失败"
+                reason = (
+                    evaluator_response.split("]", 1)[-1].strip()
+                    if "]" in evaluator_response
+                    else "任务失败"
+                )
                 report_path = self._save_report("failed", reason)
                 print(f"\n[失败] {reason}")
                 print(f"报告已保存：{report_path}")
@@ -251,7 +272,9 @@ class AgentEvaluator:
             current_user_input = evaluator_response
 
         # 达到最大轮次
-        report_path = self._save_report("max_rounds_reached", "达到最大轮次，任务未完成")
+        report_path = self._save_report(
+            "max_rounds_reached", "达到最大轮次，任务未完成"
+        )
         print(f"\n[截止] 达到最大轮次 {self.max_rounds}，任务未完成")
         print(f"报告已保存：{report_path}")
         return False, "达到最大轮次，任务未完成"

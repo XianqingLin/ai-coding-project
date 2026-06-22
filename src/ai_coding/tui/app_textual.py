@@ -30,6 +30,7 @@ from ai_coding.agent.events import (
     ToolCallEvent,
 )
 from ai_coding.config import DEFAULT_LLM_PROVIDER
+from ai_coding.logger import get_logger
 
 
 class AICodingApp(App):
@@ -140,6 +141,7 @@ class AICodingApp(App):
         self._last_tool_collapsible: Optional[Collapsible] = None
         self._current_assistant_text: str = ""
         self._current_thinking_text: str = ""
+        self._memory_compacted: bool = False
         super().__init__()
 
     # ------------------------------------------------------------------ #
@@ -432,6 +434,7 @@ class AICodingApp(App):
             self._add_system_message(
                 "Available commands:\n"
                 "  /help              — Show this help\n"
+                "  /compact           — Extract long-term memories now\n"
                 "  /new               — Create a new session\n"
                 "  /session list      — List all sessions\n"
                 "  /session switch ID — Switch session\n"
@@ -484,6 +487,10 @@ class AICodingApp(App):
 
         if cmd == "/session":
             self._handle_session_command(parts)
+            return
+
+        if cmd == "/compact":
+            self._compact_memory()
             return
 
         self._add_error_message(
@@ -563,6 +570,20 @@ class AICodingApp(App):
 
         else:
             self._add_error_message(f"Unknown subcommand: {sub}")
+
+    def _compact_memory(self) -> None:
+        """触发记忆压缩并在界面显示结果."""
+        if self._memory_compacted:
+            self._add_system_message("Memory already compacted for this session.")
+            return
+        try:
+            result = self.service.compact_memory()
+            self._memory_compacted = True
+            self._add_system_message(result.data)
+        except Exception as e:
+            logger = get_logger(__name__)
+            logger.warning(f"记忆压缩失败: {e}")
+            self._add_error_message(f"Memory compact failed: {e}")
 
     # ------------------------------------------------------------------ #
     # Agent 运行

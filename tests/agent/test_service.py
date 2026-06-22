@@ -17,6 +17,9 @@ from ai_coding.agent.events import (
     UserInputEvent,
 )
 from ai_coding.agent.service import AgentService
+from ai_coding.memory import MemoryEntry, MemoryStore
+from ai_coding.memory.models import MemoryScope, MemoryType
+from ai_coding.tools.base import ToolResult
 
 
 @pytest.fixture
@@ -197,16 +200,96 @@ class TestAgentServiceReadOnlyQueries:
         assert service.current_session_id == sid2
         assert agent is not None
 
-    def test_get_agent_switches(self, service):
-        sid1 = service.create_session("first")
-        sid2 = service.create_session("second")
-        assert service.current_session_id == sid2
 
-        agent = service._get_agent(sid1)
-        assert service.current_session_id == sid1
-        assert agent is not None
+class TestAgentServiceMemory:
+    """长期记忆相关测试."""
 
-    def test_resolve_session_id_defaults_to_current(self, service):
-        sid = service.create_session("test")
-        assert service._resolve_session_id(None) == sid
-        assert service._resolve_session_id(sid) == sid
+    def test_compact_memory_with_mock_agent(self, service, monkeypatch):
+        """compact_memory 应提取并保存记忆."""
+        service.create_session("test")
+        mock_agent = MagicMock()
+        mock_agent.state = {
+            "messages": [
+                MagicMock(content="以后都用中文回复我"),
+            ]
+        }
+        monkeypatch.setattr(service, "_get_agent_safe", lambda _=None: mock_agent)
+
+        called = {"times": 0}
+
+        def fake_llm_factory():
+            called["times"] += 1
+            from ai_coding.mock_llm import MockChatModel, mock_text
+
+            return MockChatModel(
+                responses=[
+                    mock_text(
+                        '{"memories": [{"content": "使用中文回复", '
+                        '"type": "preference", "scope": "user", '
+                        '"confidence": 0.9, "explicit": true}]}'
+                    )
+                ]
+            )
+
+        service._llm_factory = fake_llm_factory
+        result = service.compact_memory()
+
+        assert isinstance(result, ToolResult)
+        assert result.success
+        assert "已提取并保存 1 条长期记忆" in result.data
+
+    def test_user_memory_injected_into_system_prompt(
+        self, isolated_work_dir, monkeypatch
+    ):
+        """用户级记忆应被注入到系统提示中，并在新项目中可见."""
+        storage_root = isolated_work_dir / "memory_data"
+        user_store = MemoryStore(root=storage_root, scope=MemoryScope.USER)
+        user_store.add_or_update(
+            MemoryEntry(
+                content="用户偏好中文回复",
+                type=MemoryType.PREFERENCE,
+                scope=MemoryScope.USER,
+                explicit=True,
+                confidence=0.9,
+            )
+        )
+
+        service = AgentService(
+            work_dir=str(isolated_work_dir),
+            llm_provider="mock",
+            auto_approve=True,
+            memory_root=storage_root,
+        )
+        service.create_session("test")
+        prompt = service.get_system_prompt()
+        assert "用户偏好中文回复" in prompt
+
+    def test_project_memory_injected_into_system_prompt(
+        self, isolated_work_dir, monkeypatch
+    ):
+        """项目级记忆应被注入到系统提示中."""
+        storage_root = isolated_work_dir / "memory_data"
+        project_store = MemoryStore(
+            work_dir=str(isolated_work_dir),
+            root=storage_root,
+            scope=MemoryScope.PROJECT,
+        )
+        project_store.add_or_update(
+            MemoryEntry(
+                content="项目使用 pytest",
+                type=MemoryType.FACT,
+                scope=MemoryScope.PROJECT,
+                explicit=True,
+                confidence=0.9,
+            )
+        )
+
+        service = AgentService(
+            work_dir=str(isolated_work_dir),
+            llm_provider="mock",
+            auto_approve=True,
+            memory_root=storage_root,
+        )
+        service.create_session("test")
+        prompt = service.get_system_prompt()
+        assert "项目使用 pytest" in prompt

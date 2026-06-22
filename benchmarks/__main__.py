@@ -10,7 +10,12 @@ import sys
 from pathlib import Path
 
 from benchmarks.loader import load_task, load_tasks
-from benchmarks.reporter import default_report_path, print_summary, print_tasks_table, save_report
+from benchmarks.reporter import (
+    default_report_path,
+    print_summary,
+    print_tasks_table,
+    save_report,
+)
 from benchmarks.runner import BenchmarkRunner
 
 

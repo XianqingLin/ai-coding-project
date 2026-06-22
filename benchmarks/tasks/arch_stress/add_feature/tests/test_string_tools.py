@@ -2,7 +2,7 @@ import sys
 
 sys.path.insert(0, ".")
 
-from string_tools import reverse, is_palindrome
+from string_tools import is_palindrome, reverse
 
 
 def test_reverse():
