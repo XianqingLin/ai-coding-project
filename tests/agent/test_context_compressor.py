@@ -72,3 +72,38 @@ class TestContextCompressor:
     def test_empty_messages(self):
         compressor = ContextCompressor(token_budget=1000)
         assert compressor.compress([]) == []
+
+    def test_instruction_embedded_in_turns_summary(self):
+        """提供焦点指令时，older turns 汇总消息应包含该指令."""
+        compressor = ContextCompressor(token_budget=80, keep_recent_turns=1)
+        messages = [SystemMessage(content="system")]
+        for i in range(4):
+            messages.append(HumanMessage(content=f"question {i}"))
+            messages.append(
+                AIMessage(
+                    content=f"answer {i} " + "x" * 200,
+                    tool_calls=[
+                        {
+                            "name": "read_file",
+                            "args": {"path": f"src/{i}.py"},
+                            "id": f"call_{i}",
+                        }
+                    ],
+                )
+            )
+
+        compressed, stats = compressor.compress_with_stats(
+            messages, instruction="保留数据库设计"
+        )
+
+        assert "turns_summary" in stats["strategies_applied"]
+        summary_msg = next(
+            (
+                m
+                for m in compressed
+                if isinstance(m, SystemMessage) and "此前对话摘要" in m.content
+            ),
+            None,
+        )
+        assert summary_msg is not None
+        assert "保留数据库设计" in summary_msg.content

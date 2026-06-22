@@ -65,26 +65,34 @@ class ContextCompressor:
         self.keep_recent_turns = keep_recent_turns
         self._encoder = tiktoken.get_encoding("cl100k_base") if tiktoken else None
 
-    def compress(self, messages: List[BaseMessage]) -> List[BaseMessage]:
+    def compress(
+        self,
+        messages: List[BaseMessage],
+        instruction: Optional[str] = None,
+    ) -> List[BaseMessage]:
         """压缩消息列表到 token 预算内.
 
         Args:
             messages: 完整的消息历史列表.
+            instruction: 可选的用户焦点指令，会嵌入到轮次摘要中.
 
         Returns:
             压缩后的消息列表，不改变原始列表.
             原始 SystemMessage（系统提示）始终保留在列表最前.
         """
-        compressed, _stats = self.compress_with_stats(messages)
+        compressed, _stats = self.compress_with_stats(messages, instruction=instruction)
         return compressed
 
     def compress_with_stats(
-        self, messages: List[BaseMessage]
+        self,
+        messages: List[BaseMessage],
+        instruction: Optional[str] = None,
     ) -> Tuple[List[BaseMessage], Dict[str, Any]]:
         """压缩消息列表并返回统计信息.
 
         Args:
             messages: 完整的消息历史列表.
+            instruction: 可选的用户焦点指令，会嵌入到轮次摘要中.
 
         Returns:
             (压缩后的消息列表, 统计字典)
@@ -145,7 +153,7 @@ class ContextCompressor:
 
         # Step 3: 如果还超预算，将 older turns 整体压缩成一条 summary
         if self._estimate_tokens(system_msgs + combined) > self.token_budget:
-            older_summary = self._create_turns_summary(older)
+            older_summary = self._create_turns_summary(older, instruction=instruction)
             combined = recent + [older_summary]
             stats["strategies_applied"].append("turns_summary")
             tokens_after_turn_summary = self._estimate_tokens(system_msgs + combined)
@@ -281,10 +289,15 @@ class ContextCompressor:
         # 4. 兜底：长文本但非特定格式
         return content[:500] + f"\n...（省略 {len(content) - 500} 字符）..."
 
-    def _create_turns_summary(self, messages: List[BaseMessage]) -> SystemMessage:
+    def _create_turns_summary(
+        self,
+        messages: List[BaseMessage],
+        instruction: Optional[str] = None,
+    ) -> SystemMessage:
         """将多轮 older messages 压缩成一条 SystemMessage.
 
         简单规则版：提取 AIMessage 中的 tool_calls 形成行动摘要.
+        若提供了 instruction，会追加到摘要末尾，提示后续模型重点关注.
         """
         actions: List[str] = []
         files_accessed: set = set()
@@ -308,6 +321,14 @@ class ContextCompressor:
             lines.extend(unique_actions)
         if files_accessed:
             lines.append(f"\n已访问的文件: {', '.join(sorted(files_accessed))}")
+        if instruction:
+            lines.extend(
+                [
+                    "",
+                    "## 需要特别保留的上下文",
+                    f"请在后续对话中重点关注：{instruction}",
+                ]
+            )
 
         return SystemMessage(content="\n".join(lines))
 

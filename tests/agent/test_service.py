@@ -205,7 +205,7 @@ class TestAgentServiceMemory:
     """长期记忆相关测试."""
 
     def test_compact_memory_with_mock_agent(self, service, monkeypatch):
-        """compact_memory 应提取并保存记忆."""
+        """compact_memory 应先压缩上下文，再提取并保存记忆."""
         service.create_session("test")
         mock_agent = MagicMock()
         mock_agent.state = {
@@ -213,6 +213,9 @@ class TestAgentServiceMemory:
                 MagicMock(content="以后都用中文回复我"),
             ]
         }
+        mock_agent.compact = MagicMock(
+            return_value="上下文已压缩: 1条/10token → 1条/5token"
+        )
         monkeypatch.setattr(service, "_get_agent_safe", lambda _=None: mock_agent)
 
         called = {"times": 0}
@@ -232,11 +235,13 @@ class TestAgentServiceMemory:
             )
 
         service._llm_factory = fake_llm_factory
-        result = service.compact_memory()
+        result = service.compact_memory(instruction="保留数据库设计")
 
         assert isinstance(result, ToolResult)
         assert result.success
+        assert "上下文已压缩" in result.data
         assert "已提取并保存 1 条长期记忆" in result.data
+        mock_agent.compact.assert_called_once_with(instruction="保留数据库设计")
 
     def test_user_memory_injected_into_system_prompt(
         self, isolated_work_dir, monkeypatch

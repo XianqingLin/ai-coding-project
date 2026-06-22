@@ -43,6 +43,7 @@ class _MockAgentService:
         self._events: List[AgentEvent] = []
         self.last_input: str = ""
         self.compact_called: bool = False
+        self.last_compact_instruction: Optional[str] = None
 
     @property
     def current_session_id(self) -> Optional[str]:
@@ -116,9 +117,10 @@ class _MockAgentService:
     def set_events(self, events: List[AgentEvent]) -> None:
         self._events = events
 
-    def compact_memory(self, session_id: Optional[str] = None):
+    def compact_memory(self, session_id: Optional[str] = None, instruction: str = ""):
         """模拟记忆压缩."""
         self.compact_called = True
+        self.last_compact_instruction = instruction
         return ToolResult.ok("Compacted 2 memories")
 
 
@@ -260,6 +262,33 @@ class TestAICodingAppCommands:
             messages = list(history.query(".system-message"))
             assert len(messages) >= 1
             assert "Compacted 2 memories" in _static_text(messages[-1])
+            assert mock_service.compact_called is True
+            assert mock_service.last_compact_instruction == ""
+
+    async def test_compact_command_with_instruction(
+        self, mock_service: _MockAgentService
+    ) -> None:
+        """/compact 后的文本应作为焦点指令透传."""
+        app = AICodingApp(mock_service)
+        async with app.run_test() as pilot:
+            await _type_string(pilot, "/compact 保留数据库设计")
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert mock_service.compact_called is True
+            assert mock_service.last_compact_instruction == "保留数据库设计"
+
+    async def test_compact_command_can_be_repeated(
+        self, mock_service: _MockAgentService
+    ) -> None:
+        """应允许同一会话多次执行 /compact."""
+        app = AICodingApp(mock_service)
+        async with app.run_test() as pilot:
+            for _ in range(3):
+                await _type_string(pilot, "/compact")
+                await pilot.press("enter")
+                await pilot.pause()
+
             assert mock_service.compact_called is True
 
 

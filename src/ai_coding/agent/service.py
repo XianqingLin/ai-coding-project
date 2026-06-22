@@ -112,11 +112,19 @@ class AgentService:
             {MemoryScope.USER: user_store, MemoryScope.PROJECT: project_store}
         )
 
-    def compact_memory(self, session_id: Optional[str] = None) -> ToolResult:
-        """手动触发当前/指定会话的记忆压缩.
+    def compact_memory(
+        self,
+        session_id: Optional[str] = None,
+        instruction: str = "",
+    ) -> ToolResult:
+        """手动触发当前/指定会话的上下文压缩与记忆提取.
 
-        直接从 Agent 状态中提取完整消息历史，提取长期记忆并持久化，
-        不经过 Agent 工具调用与 approval 流程。
+        先压缩 Agent 的会话上下文以释放窗口，再顺手从原始消息中提取
+        长期记忆并持久化，不经过 Agent 工具调用与 approval 流程。
+
+        Args:
+            session_id: 目标会话 ID，默认当前会话.
+            instruction: 可选的焦点指令，会嵌入到上下文摘要中.
         """
         agent = self._get_agent_safe(session_id)
         if agent is None:
@@ -125,10 +133,22 @@ class AgentService:
         state = getattr(agent, "state", None)
         if not isinstance(state, dict):
             return ToolResult.fail("[错误] Agent 状态不可用")
-        messages = state.get("messages", [])
+        messages = list(state.get("messages", []))
         if not messages:
             return ToolResult.ok("[成功] 当前会话没有消息，无需压缩")
 
+        # 1. 先压缩上下文（主要目的）
+        compact_fn = getattr(agent, "compact", None)
+        if compact_fn is not None and callable(compact_fn):
+            try:
+                compact_msg = compact_fn(instruction=instruction)
+            except Exception as e:
+                logger.warning(f"上下文压缩失败: {e}")
+                compact_msg = f"[警告] 上下文压缩失败: {e}"
+        else:
+            compact_msg = "[提示] 当前 Agent 不支持上下文压缩"
+
+        # 2. 顺手提取长期记忆（副作用）
         extractor = MemoryExtractor(llm_factory=self._llm_factory)
         sid = session_id or self.current_session_id or ""
         try:
@@ -137,28 +157,27 @@ class AgentService:
             logger.warning(f"记忆提取失败: {e}")
             return ToolResult.fail(f"[错误] 记忆提取失败: {e}")
 
-        if not entries:
-            return ToolResult.ok("[成功] 本次对话未提取到新的长期记忆")
+        memory_msg = "[成功] 本次对话未提取到新的长期记忆"
+        if entries:
+            project_store = MemoryStore(
+                work_dir=self.work_dir,
+                root=self._memory_root,
+                scope=MemoryScope.PROJECT,
+            )
+            user_store = MemoryStore(
+                root=self._memory_root,
+                scope=MemoryScope.USER,
+            )
+            for entry in entries:
+                if entry.scope == MemoryScope.USER:
+                    user_store.add_or_update(entry)
+                else:
+                    project_store.add_or_update(entry)
 
-        project_store = MemoryStore(
-            work_dir=self.work_dir,
-            root=self._memory_root,
-            scope=MemoryScope.PROJECT,
-        )
-        user_store = MemoryStore(
-            root=self._memory_root,
-            scope=MemoryScope.USER,
-        )
-        for entry in entries:
-            if entry.scope == MemoryScope.USER:
-                user_store.add_or_update(entry)
-            else:
-                project_store.add_or_update(entry)
+            summaries = "\n".join(f"- {e.content}" for e in entries)
+            memory_msg = f"[成功] 已提取并保存 {len(entries)} 条长期记忆：\n{summaries}"
 
-        summaries = "\n".join(f"- {e.content}" for e in entries)
-        return ToolResult.ok(
-            f"[成功] 已提取并保存 {len(entries)} 条长期记忆：\n{summaries}"
-        )
+        return ToolResult.ok(f"{compact_msg}\n\n{memory_msg}")
 
     # ------------------------------------------------------------------ #
     # 会话管理

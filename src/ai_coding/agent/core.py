@@ -237,20 +237,25 @@ class LangGraphAgent:
             "sub_agents": list(self.state.get("sub_agents", [])),
         }
 
-    def compact(self) -> str:
+    def compact(self, instruction: str = "") -> str:
         """显式压缩 AgentState，释放上下文空间.
 
         压缩结果直接替换 state["messages"] 中的原始消息.
+
+        Args:
+            instruction: 可选的用户焦点指令，会嵌入到 older turns 的摘要中.
         """
         if self.state is None or not self.context_compressor:
-            return "当前无需压缩"
+            return "当前未启用上下文压缩"
 
         original_count = len(self.state["messages"])
         original_tokens = self.context_compressor._estimate_tokens(
             list(self.state["messages"])
         )
 
-        compressed = self.context_compressor.compress(list(self.state["messages"]))
+        compressed = self.context_compressor.compress(
+            list(self.state["messages"]), instruction=instruction or None
+        )
         self.state["messages"] = compressed
 
         new_tokens = self.context_compressor._estimate_tokens(compressed)

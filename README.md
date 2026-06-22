@@ -23,9 +23,9 @@
 | 单元测试 | **442** 用例，覆盖率 **86%** |
 | 内置 Benchmark | **9** 个可量化任务（fibonacci / tetris / 5 个 architecture-stress） |
 | 工具数量 | **24** 个内置工具 |
-| 记忆机制 | 项目级记忆 + 跨项目用户偏好，通过 `/compact` 手动触发提取 |
+| 记忆机制 | 上下文自动/手动压缩 + 用户级/项目级长期记忆，`/compact` 触发 |
 | 模型支持 | Kimi / OpenAI / Mock 三种 Provider |
-| 架构 | LangGraph ReAct + 审批门控 + 工作目录边界校验 + 上下文压缩 + 长期记忆（含自动记忆压缩） |
+| 架构 | LangGraph ReAct + 审批门控 + 工作目录边界校验 + 上下文压缩 + 长期记忆 |
 | 界面 | CLI + Textual 全屏 TUI |
 
 > 所有代码均通过 `black` / `isort` / `flake8` / `mypy` 检查，CI 在 Python 3.10/3.11/3.12 上全绿运行。

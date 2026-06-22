@@ -145,3 +145,44 @@ class TestLangGraphAgentAutoCompact:
             compressor._estimate_tokens(agent.state["messages"])
             <= compressor.token_budget
         )
+
+    def test_compact_with_instruction(self) -> None:
+        """手动 compact 时传入焦点指令，应嵌入到摘要中."""
+        llm = MockChatModel(responses=[mock_text("ok")])
+        agent = LangGraphAgent(
+            work_dir=".",
+            llm=llm,
+            tools=[],
+            system_prompt="测试",
+            short_term_memory_budget=500,
+        )
+
+        messages = [SystemMessage(content="系统提示")]
+        for i in range(20):
+            messages.append(HumanMessage(content=f"问题 {i}: " + "x" * 200))
+            messages.append(AIMessage(content=f"回答 {i}: " + "y" * 200))
+
+        agent.state = {
+            "messages": messages,
+            "file_snapshots": {},
+            "todos": [],
+            "globally_approved_tools": [],
+            "background_tasks": [],
+            "plan_mode": False,
+            "plan_file_path": "",
+            "sub_agents": [],
+        }
+
+        msg = agent.compact(instruction="保留数据库设计")
+        assert "上下文已压缩" in msg
+
+        summary_msg = next(
+            (
+                m
+                for m in agent.state["messages"]
+                if isinstance(m, SystemMessage) and "此前对话摘要" in m.content
+            ),
+            None,
+        )
+        assert summary_msg is not None
+        assert "保留数据库设计" in summary_msg.content

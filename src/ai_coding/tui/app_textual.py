@@ -141,7 +141,6 @@ class AICodingApp(App):
         self._last_tool_collapsible: Optional[Collapsible] = None
         self._current_assistant_text: str = ""
         self._current_thinking_text: str = ""
-        self._memory_compacted: bool = False
         super().__init__()
 
     # ------------------------------------------------------------------ #
@@ -490,7 +489,8 @@ class AICodingApp(App):
             return
 
         if cmd == "/compact":
-            self._compact_memory()
+            instruction = text[len("/compact") :].strip()
+            self._compact_memory(instruction=instruction)
             return
 
         self._add_error_message(
@@ -571,14 +571,10 @@ class AICodingApp(App):
         else:
             self._add_error_message(f"Unknown subcommand: {sub}")
 
-    def _compact_memory(self) -> None:
-        """触发记忆压缩并在界面显示结果."""
-        if self._memory_compacted:
-            self._add_system_message("Memory already compacted for this session.")
-            return
+    def _compact_memory(self, instruction: str = "") -> None:
+        """触发上下文压缩与记忆提取，并在界面显示结果."""
         try:
-            result = self.service.compact_memory()
-            self._memory_compacted = True
+            result = self.service.compact_memory(instruction=instruction)
             self._add_system_message(result.data)
         except Exception as e:
             logger = get_logger(__name__)
