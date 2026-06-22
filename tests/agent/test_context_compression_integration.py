@@ -139,7 +139,7 @@ class TestLangGraphAgentAutoCompact:
 
         compressed_count = len(agent.state["messages"])
         assert compressed_count < original_count
-        # 压缩后应在预算内（考虑 AUTO_COMPACT_THRESHOLD=0.95）
+        # 压缩后应在预算内（考虑 AUTO_COMPACT_THRESHOLD=0.80）
         compressor = agent.context_compressor
         assert (
             compressor._estimate_tokens(agent.state["messages"])

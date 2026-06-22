@@ -44,7 +44,7 @@ logger = get_logger(__name__)
 DEFAULT_CONTEXT_LIMIT = 128000
 
 # 自动压缩触发阈值（相对于 token_budget 的比例）
-AUTO_COMPACT_THRESHOLD = 0.95
+AUTO_COMPACT_THRESHOLD = 0.80
 
 
 class LangGraphAgent:
